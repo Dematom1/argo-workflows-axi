@@ -1,0 +1,62 @@
+{
+  "name": "argo-workflows-axi",
+  "version": "0.1.0",
+  "description": "AXI-compliant Argo Workflows CLI wrapper - token-efficient TOON output, read-first, previewed and allowlisted writes",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dematom1/argo-workflows-axi.git"
+  },
+  "keywords": [
+    "argo",
+    "argo-workflows",
+    "kubernetes",
+    "cli",
+    "agent",
+    "axi",
+    "toon"
+  ],
+  "bin": {
+    "argo-workflows-axi": "./dist/bin/argo-workflows-axi.js",
+    "argo-workflows-axi-ctx": "./dist/bin/argo-workflows-axi-ctx.js"
+  },
+  "files": [
+    "dist/bin",
+    "dist/src",
+    "skills/argo-workflows-axi",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "build:skill": "tsx scripts/build-skill.ts",
+    "check:skill": "tsx scripts/build-skill.ts --check",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "dev": "tsx bin/argo-workflows-axi.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@10.18.3",
+  "dependencies": {
+    "@toon-format/toon": "2.3.1",
+    "axi-sdk-js": "0.1.13",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "globals": "17.13.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "3.2.7"
+  }
+}
