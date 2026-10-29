@@ -1,4 +1,12 @@
-# argo-workflows-axi
+<h1 align="center">argo-workflows-axi</h1>
+
+<p align="center">
+  <a href="https://www.npmjs.com/package/argo-workflows-axi"><img alt="npm" src="https://img.shields.io/npm/v/argo-workflows-axi?style=flat-square" /></a>
+  <a href="https://github.com/Dematom1/argo-workflows-axi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argo-workflows-axi/ci.yml?style=flat-square&label=ci" /></a>
+  <a href="https://github.com/Dematom1/argo-workflows-axi/actions/workflows/release-please.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argo-workflows-axi/release-please.yml?style=flat-square&label=release" /></a>
+  <a href="https://img.shields.io/badge/platform-Linux-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-Linux-blue?style=flat-square" /></a>
+  <a href="https://x.com/dematom1"><img alt="X" src="https://img.shields.io/badge/X-@dematom1-black?style=flat-square" /></a>
+</p>
 
 An [AXI](https://github.com/kunchenguid/axi) for [Argo Workflows](https://argo-workflows.readthedocs.io/): an agent-ergonomic wrapper around the `argo` CLI with token-efficient [TOON](https://toonformat.dev/) output, bounded logs and waits, and a read-first safety model where every write previews by default.
 
