@@ -7,7 +7,7 @@ Thanks for helping. A few rules keep this tool safe for agents:
 - **Follow the [AXI principles](https://github.com/kunchenguid/axi):** TOON on stdout, minimal default schemas, truncation with sizes, definitive empty states, structured errors with exit codes 0/1/2, unknown flags rejected before any call, and a few contextual `help` lines.
 - **Use argo's own flag names.** Do not invent a parallel vocabulary.
 
-Every pull request must use a conventional commit title and be raised through no-mistakes and pass its required PR-body check. Reviewers classify the change against the existing contract:
+Every pull request must use a [conventional commit title](.github/workflows/pr-title.yml) and be raised through no-mistakes and pass its required PR-body check. Reviewers classify the change against the existing contract:
 
 - **restore**: restores documented or established behavior; may merge after review and green checks.
 - **opt-in**: adds behavior users explicitly enable without changing existing defaults; may merge after review and green checks.
