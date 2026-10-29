@@ -251,23 +251,51 @@ describe("archive", () => {
 });
 
 describe("archive get", () => {
-  it("looks an archived workflow up by name only", () => {
+  it("resolves the name to the newest archived run's UID (argo v3.7-v4.0 take only a UID)", () => {
     const server = [
       "--argo-server",
       "argo.example.internal:2746",
       "-n",
       "argo",
     ];
+    const older = d.failedEtl() as {
+      metadata: Record<string, unknown>;
+      status: Record<string, unknown>;
+    };
+    older.metadata.uid = "00000000-0000-4000-8000-000000000000";
+    older.status.finishedAt = d.ago(9 * 86400);
     const result = run(["archive", "get", "nightly-etl-x7k2p", ...server], {
       responses: [
         {
-          match: ["archive", "get", "nightly-etl-x7k2p", "--name"],
+          match: ["archive", "list", "--output=json"],
+          stdout: json([older, d.failedEtl(), d.succeededReport()]),
+        },
+        {
+          match: ["archive", "get", "11111111-2222-4333-8444-555555555555"],
           stdout: json(d.failedEtl()),
         },
       ],
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("nightly-etl-x7k2p");
+    expect(result.stdout).toContain(
+      "2 archived runs are named nightly-etl-x7k2p; showing the newest (uid 11111111-2222-4333-8444-555555555555)",
+    );
+    const getCall = argoCalls(result).find((a) => a[1] === "get");
+    expect(getCall).toEqual([
+      "archive",
+      "get",
+      "11111111-2222-4333-8444-555555555555",
+      "--output=json",
+      "--argo-server=argo.example.internal:2746",
+      "--namespace=argo",
+      "--loglevel=error",
+    ]);
+    const missing = run(["archive", "get", "ghost", ...server], {
+      responses: [{ match: ["archive", "list"], stdout: "[]" }],
+    });
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stdout).toContain("code: NOT_FOUND");
     const byUid = run([
       "archive",
       "get",

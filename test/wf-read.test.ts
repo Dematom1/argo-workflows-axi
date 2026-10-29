@@ -120,6 +120,29 @@ describe("wf list", () => {
 });
 
 describe("wf get", () => {
+  it("truncates long parameter values unless --full", () => {
+    const big = d.failedEtl() as {
+      spec: {
+        arguments: { parameters: Array<{ name: string; value: string }> };
+      };
+    };
+    big.spec.arguments.parameters.push({
+      name: "payload",
+      value: "x".repeat(5000),
+    });
+    const responses = [
+      ...KUBE_DEFAULTS,
+      { match: ["get", "nightly-etl-x7k2p"], stdout: json(big) },
+    ];
+    const short = run(["wf", "get", "nightly-etl-x7k2p"], { responses });
+    expect(short.stdout).toContain("(truncated, 5000 chars total)");
+    expect(short.stdout).not.toContain("x".repeat(201));
+    const full = run(["wf", "get", "nightly-etl-x7k2p", "--full"], {
+      responses,
+    });
+    expect(full.stdout).toContain("x".repeat(5000));
+  });
+
   it("shows the summary, only failed nodes with hints, and redacts sensitive parameters", () => {
     const result = run(["wf", "get", "nightly-etl-x7k2p"], {
       responses: [
@@ -339,6 +362,15 @@ describe("wf wait", () => {
 });
 
 describe("lint", () => {
+  it("treats a failed lint run with no output as an error, not 0 problems", () => {
+    const result = run(["wf", "lint", "x.yaml"], {
+      responses: [...KUBE_DEFAULTS, { match: ["lint"], stdout: "", exit: 1 }],
+    });
+    expect(result.exitCode).toBe(1);
+    expect(result.stdout).toContain("code: UNKNOWN");
+    expect(result.stdout).not.toContain("problem");
+  });
+
   it("reports problems as data with exit 0", () => {
     const result = run(["wf", "lint", "bad.yaml"], {
       responses: [

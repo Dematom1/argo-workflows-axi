@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
+import { shellQuote } from "../src/format.js";
 import { isApprovalFor, mintApproval } from "../src/approval.js";
 import { extractDetail, mapArgoFailure } from "../src/errors.js";
 import { checkWrite } from "../src/gate.js";
@@ -235,6 +236,20 @@ describe("flag parsing", () => {
     expect(parsed.bools.has("--apply")).toBe(true);
   });
 
+  it("takes dash-prefixed values unless the next token is one of the command's flags", () => {
+    const parsed = parseArgs(["--status", "-v"], spec, "t");
+    expect(parsed.values.get("--status")).toEqual(["-v"]);
+    expect(
+      parseArgs(["--status", "-5"], spec, "t").values.get("--status"),
+    ).toEqual(["-5"]);
+    expect(() => parseArgs(["--status", "--apply"], spec, "t")).toThrow(
+      /requires a value/,
+    );
+    expect(() => parseArgs(["--status", "-n", "argo"], spec, "t")).toThrow(
+      /requires a value/,
+    );
+  });
+
   it("rejects unknown, valueless, repeated and `--` input", () => {
     expect(() => parseArgs(["--nope"], spec, "t")).toThrow(
       /Unknown flag --nope/,
@@ -393,5 +408,14 @@ describe("--version fast path", () => {
     });
     expect(other.status).not.toBe(0);
     expect(other.stderr).toContain("command graph loaded");
+  });
+});
+
+describe("shellQuote", () => {
+  it("quotes shell metacharacters, including redirections", () => {
+    expect(shellQuote("kind-dev")).toBe("kind-dev");
+    expect(shellQuote("done>now")).toBe("'done>now'");
+    expect(shellQuote("<context>")).toBe("'<context>'");
+    expect(shellQuote("it's")).toBe("'it'\\''s'");
   });
 });

@@ -128,7 +128,7 @@ export const OPERATIONS = {
     bin: "argo",
     command: ["archive", "get"],
     tier: "read",
-    flags: ["--output", "--name"],
+    flags: ["--output"],
     targeted: READ_TARGET,
   },
   // Local only: no network, no credentials

@@ -427,14 +427,46 @@ export async function archiveGet(args: string[]): Promise<Output> {
   const parsed = parseArgs(args, TARGET_FLAGS, usage);
   const [name] = requirePositionals(parsed, 1, 1, usage);
   assertName(name, "workflow", usage);
-  await requireServerMode(parsed);
-  const { stdout } = await runRead(
-    "archive.get",
-    [name, "--name", "--output=json"],
-    {
-      target: forwardTarget(parsed),
-    },
-  );
+  const target = await requireServerMode(parsed);
+  const forward = forwardTarget(parsed);
+
+  // `argo archive get` takes only a UID before v4.1, so resolve the name to
+  // its UID first; a bare UID works on every supported version.
+  const listed = await runRead("archive.list", ["--output=json"], {
+    target: forward,
+    timeoutMs: 60_000,
+  });
+  const all = parseJson<Workflow[] | null>(listed.stdout, "archive list");
+  const matches = (Array.isArray(all) ? all : [])
+    .filter((wf) => wf.metadata.name === name && wf.metadata.uid)
+    .sort((a, b) =>
+      (
+        b.status?.finishedAt ??
+        b.metadata.creationTimestamp ??
+        ""
+      ).localeCompare(
+        a.status?.finishedAt ?? a.metadata.creationTimestamp ?? "",
+      ),
+    );
+  if (matches.length === 0) {
+    throw axiError(
+      `No archived workflow named ${name} in namespace ${target.namespace}`,
+      "NOT_FOUND",
+      [
+        `Run \`argo-workflows-axi archive list${targetSuffix(parsed)}\` to see archived workflows`,
+      ],
+    );
+  }
+  const uid = matches[0].metadata.uid as string;
+  const { stdout } = await runRead("archive.get", [uid, "--output=json"], {
+    target: forward,
+  });
   const wf = parseJson<Workflow>(stdout, "archived workflow");
-  return redacted({ archived_workflow: workflowSummary(wf) });
+  const out: Record<string, unknown> = {
+    archived_workflow: workflowSummary(wf),
+  };
+  if (matches.length > 1) {
+    out.matches = `${matches.length} archived runs are named ${name}; showing the newest (uid ${uid})`;
+  }
+  return redacted(out);
 }

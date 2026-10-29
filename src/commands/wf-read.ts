@@ -325,7 +325,7 @@ export function workflowSummary(
   if (params.length > 0) {
     summary.parameters = params.map((p) => ({
       name: p.name,
-      value: p.value ?? "",
+      value: full ? (p.value ?? "") : truncateHead(p.value ?? "", 200).text,
     }));
   }
   if (full) {
@@ -701,16 +701,32 @@ examples[2]:
   cat my-wf.yaml | argo-workflows-axi wf lint -
 `;
 
-/** Materialize `-` (stdin) as a private temp file so argo never reads our stdin. */
+/**
+ * Names that mean "standard input". They are read through fd 0 rather than
+ * reopened by path: on Linux, `/dev/stdin` is `/proc/self/fd/0`, and opening it
+ * fails with ENXIO when stdin is a socket (as Node's spawn provides).
+ */
+const STDIN_PATHS = new Set([
+  "-",
+  "/dev/stdin",
+  "/dev/fd/0",
+  "/proc/self/fd/0",
+]);
+
+export function isStdinPath(file: string): boolean {
+  return STDIN_PATHS.has(file);
+}
+
+/** Materialize stdin as a private temp file so argo never reads our stdin. */
 export function withSpecFiles<T>(
   files: string[],
   fn: (paths: string[]) => Promise<T>,
 ): Promise<T> {
-  if (!files.includes("-")) return fn(files);
+  if (!files.some(isStdinPath)) return fn(files);
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
   const path = join(dir, "stdin.yaml");
-  writeFileSync(path, readFileSync(0, "utf-8"), { mode: 0o600 });
-  return fn(files.map((f) => (f === "-" ? path : f))).finally(() =>
+  writeFileSync(path, readFileSync(0), { mode: 0o600 });
+  return fn(files.map((f) => (isStdinPath(f) ? path : f))).finally(() =>
     rmSync(dir, { recursive: true, force: true }),
   );
 }
@@ -749,6 +765,10 @@ export async function lintFiles(
       (l) =>
         l && !/no linting errors found|^time=|level=(info|debug|warn)/i.test(l),
     );
+  if (result.exitCode !== 0 && problems.length === 0) {
+    // argo failed without saying why: that is a failed lint run, not "0 problems".
+    throw mapArgoFailure(result.stderr || result.stdout);
+  }
   return {
     ok: result.exitCode === 0,
     problems: result.exitCode === 0 ? [] : problems,

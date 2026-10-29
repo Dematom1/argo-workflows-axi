@@ -65,7 +65,7 @@ export function pluralize(n: number, one: string, many = `${one}s`): string {
 
 /** Quote a value for a copy-pasteable shell command. */
 export function shellQuote(value: string): string {
-  return /^[A-Za-z0-9_@%+=:,./<>-]+$/.test(value)
+  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(value)
     ? value
     : `'${value.replace(/'/g, "'\\''")}'`;
 }

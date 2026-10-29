@@ -700,7 +700,7 @@ describe("wf submit", () => {
   });
 
   it("reads stdin and /dev/fd-style paths once, in preview and on --apply", () => {
-    for (const source of ["-", "/dev/stdin"]) {
+    for (const source of ["-", "/dev/stdin", "/dev/fd/0"]) {
       const preview = run(["wf", "submit", source], {
         stdin: PASSTHROUGH,
         responses: SUBMIT_OK,

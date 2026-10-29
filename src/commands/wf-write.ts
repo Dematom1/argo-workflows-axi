@@ -51,7 +51,7 @@ import {
   type Parameter,
   type Workflow,
 } from "../workflow.js";
-import { lintFiles } from "./wf-read.js";
+import { isStdinPath, lintFiles } from "./wf-read.js";
 
 /**
  * Gated writes (design W3 minus `wf delete`, S3, S8, S15, W5, W6).
@@ -859,7 +859,7 @@ async function withManifest<T>(
   namespace: string,
   fn: (manifest: Manifest) => Promise<T>,
 ): Promise<T> {
-  const bytes = readFileSync(file === "-" ? 0 : file);
+  const bytes = readFileSync(isStdinPath(file) ? 0 : file);
   const wf = readManifest(bytes.toString("utf-8"), namespace);
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
   const path = join(dir, "manifest.yaml");
