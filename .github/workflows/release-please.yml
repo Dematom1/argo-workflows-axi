@@ -77,4 +77,22 @@ jobs:
       - run: pnpm run check:skill
       - run: pnpm test
 
-      - run: npm stage publish --access public --provenance
+      - name: Stage npm package
+        run: |
+          npm stage publish --access public --provenance --json > "$RUNNER_TEMP/stage-publish.json"
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          let stageId;
+          try {
+            const result = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/stage-publish.json`, 'utf8'));
+            stageId = result[pkg.name]?.stageId;
+          } catch {}
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            `Stage ID: ${stageId || 'unavailable'}`,
+            `Package: ${pkg.name}`,
+            `Version: ${pkg.version}`,
+            'Waiting for approval: run axi-approve',
+            '',
+          ].join('\n'));
+          NODE

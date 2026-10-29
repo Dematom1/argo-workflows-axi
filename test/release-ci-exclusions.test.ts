@@ -44,8 +44,11 @@ describe("release-please publishing", () => {
     ).toBeUndefined();
 
     const publishSteps = doc.jobs.publish.steps ?? [];
-    expect(publishSteps.map((s) => s.run)).toContain(
-      "npm stage publish --access public --provenance",
+    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
+      "npm stage publish --access public --provenance --json",
+    );
+    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
+      "Waiting for approval: run axi-approve",
     );
     expect(
       publishSteps.find((step) => step.uses?.startsWith("actions/checkout@"))
