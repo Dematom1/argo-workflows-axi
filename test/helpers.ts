@@ -30,6 +30,8 @@ export interface Call {
   bin: string;
   argv: string[];
   argoServerEnv: string | null;
+  /** Contents of absolute-path file arguments, read while the call ran. */
+  files: Record<string, string>;
 }
 
 export interface RunOptions {

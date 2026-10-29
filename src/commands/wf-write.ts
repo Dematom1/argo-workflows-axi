@@ -1,4 +1,6 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { parseAllDocuments } from "yaml";
 import {
   TARGET_FLAGS,
@@ -41,7 +43,7 @@ import {
   type Parameter,
   type Workflow,
 } from "../workflow.js";
-import { lintFiles, withSpecFiles } from "./wf-read.js";
+import { lintFiles } from "./wf-read.js";
 
 /**
  * Gated writes (design W3 minus `wf delete`, S3, S8, S15, W5, W6).
@@ -736,12 +738,30 @@ async function submitSourceFromResource(
   };
 }
 
-async function submitSourceFromFile(
-  path: string,
-  namespace: string,
-  forward: ReturnType<typeof forwardTarget>,
-): Promise<SubmitSource> {
-  const docs = parseAllDocuments(readFileSync(path, "utf-8"));
+type WorkflowManifest = Workflow & {
+  kind?: string;
+  metadata?: { generateName?: string; namespace?: string };
+};
+
+interface Manifest {
+  /** Private temp file holding exactly the checked manifest, as JSON. */
+  path: string;
+  wf: WorkflowManifest;
+}
+
+function readManifest(file: string, namespace: string): WorkflowManifest {
+  const docs = parseAllDocuments(
+    readFileSync(file === "-" ? 0 : file, "utf-8"),
+    { merge: true },
+  );
+  const problems = docs.flatMap((d) => [...d.errors, ...d.warnings]);
+  if (problems.length > 0) {
+    throw axiError(
+      `The manifest is not valid YAML: ${problems[0].message.split("\n")[0]}`,
+      "VALIDATION_ERROR",
+      ["Fix the manifest, then preview again"],
+    );
+  }
   const manifests = docs
     .map((d) => d.toJSON() as Record<string, unknown> | null)
     .filter(Boolean) as Array<Record<string, unknown>>;
@@ -752,10 +772,7 @@ async function submitSourceFromFile(
       ["Split the file and submit one workflow per call"],
     );
   }
-  const wf = manifests[0] as unknown as Workflow & {
-    kind?: string;
-    metadata?: { generateName?: string; namespace?: string };
-  };
+  const wf = manifests[0] as unknown as WorkflowManifest;
   if (wf.kind !== "Workflow") {
     throw axiError(
       `Expected kind Workflow, found ${String(wf.kind)}`,
@@ -775,6 +792,30 @@ async function submitSourceFromFile(
       ],
     );
   }
+  return wf;
+}
+
+/** Submit only what was checked: the normalized manifest, written to a private temp file. */
+async function withManifest<T>(
+  file: string,
+  namespace: string,
+  fn: (manifest: Manifest) => Promise<T>,
+): Promise<T> {
+  const wf = readManifest(file, namespace);
+  const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
+  const path = join(dir, "manifest.json");
+  writeFileSync(path, JSON.stringify(wf), { mode: 0o600 });
+  try {
+    return await fn({ path, wf });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function submitSourceFromFile(
+  { path, wf }: Manifest,
+  forward: ReturnType<typeof forwardTarget>,
+): Promise<SubmitSource> {
   const lint = await lintFiles("wf.lint", [path], forward);
   return {
     description: "manifest",
@@ -837,10 +878,10 @@ export async function wfSubmit(args: string[]): Promise<Output> {
   }
   const gate = checkWrite("wf.submit", parsed, target, echo.join(" "));
 
-  return withSpecFiles(files, async (paths) => {
-    const source = from
-      ? await submitSourceFromResource(from.kind, from.name, forward)
-      : await submitSourceFromFile(paths[0], target.namespace, forward);
+  const submit = async (
+    source: SubmitSource,
+    argoSource: string,
+  ): Promise<Output> => {
     const merged = mergeParameters(
       source.declared,
       flagValues(parsed, "--parameter"),
@@ -940,7 +981,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
     }
 
     const argoArgs = [
-      ...(from ? [`--from=${from.kind}/${from.name}`] : [paths[0]]),
+      argoSource,
       ...params,
       ...passthrough
         .filter(([, v]) => v !== undefined)
@@ -981,5 +1022,15 @@ export async function wfSubmit(args: string[]): Promise<Output> {
         `Run \`argo-workflows-axi wf get ${createdName}${suffix}\` for its progress`,
       ],
     };
-  });
+  };
+
+  if (from) {
+    return submit(
+      await submitSourceFromResource(from.kind, from.name, forward),
+      `--from=${from.kind}/${from.name}`,
+    );
+  }
+  return withManifest(files[0], target.namespace, async (manifest) =>
+    submit(await submitSourceFromFile(manifest, forward), manifest.path),
+  );
 }

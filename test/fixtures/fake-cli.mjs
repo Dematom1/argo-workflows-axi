@@ -6,7 +6,8 @@
 //                      "stderr": "...", "exit": 0, "times": 1, "sleepMs": 0 } ] }
 // The first response whose `bin` matches and whose `match` tokens all appear in
 // argv (and that has uses left) answers. Unmatched calls exit 1 with a
-// "fake: no response" message. Every call is appended to FAKE_LOG as JSON.
+// "fake: no response" message. Every call is appended to FAKE_LOG as JSON,
+// with the contents of any absolute-path file arguments.
 import {
   appendFileSync,
   existsSync,
@@ -20,9 +21,14 @@ const scenarioPath = process.env.FAKE_SCENARIO;
 const logPath = process.env.FAKE_LOG;
 
 if (logPath) {
+  const files = Object.fromEntries(
+    argv
+      .filter((arg) => arg.startsWith("/") && existsSync(arg))
+      .map((arg) => [arg, readFileSync(arg, "utf-8")]),
+  );
   appendFileSync(
     logPath,
-    `${JSON.stringify({ bin, argv, argoServerEnv: process.env.ARGO_SERVER ?? null })}\n`,
+    `${JSON.stringify({ bin, argv, argoServerEnv: process.env.ARGO_SERVER ?? null, files })}\n`,
   );
 }
 
