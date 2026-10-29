@@ -236,6 +236,19 @@ describe("flag parsing", () => {
     expect(parsed.bools.has("--apply")).toBe(true);
   });
 
+  it("never swallows a following --flag (known or misspelled) as a value", () => {
+    expect(() =>
+      parseArgs(
+        ["--status", "--node-field-selectors=phase=Running"],
+        spec,
+        "t",
+      ),
+    ).toThrow(/pass `--status=<value>` for a value that starts with --/);
+    expect(
+      parseArgs(["--status=--literal"], spec, "t").values.get("--status"),
+    ).toEqual(["--literal"]);
+  });
+
   it("takes dash-prefixed values unless the next token is one of the command's flags", () => {
     const parsed = parseArgs(["--status", "-v"], spec, "t");
     expect(parsed.values.get("--status")).toEqual(["-v"]);

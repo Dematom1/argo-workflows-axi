@@ -309,6 +309,19 @@ describe("archive get", () => {
     expect(truncated.stdout).toContain(
       "Ask a human to run `argo archive get 11111111-2222-4333-8444-555555555555 -o json --argo-server argo.example.internal:2746 -n argo`",
     );
+    const fromEnv = run(["archive", "get", "nightly-etl-x7k2p"], {
+      env: {
+        ARGO_SERVER: "argo.example.internal:2746",
+        ARGO_NAMESPACE: "argo",
+      },
+      responses: [
+        { match: ["archive", "list"], stdout: json([d.failedEtl()]) },
+        { match: ["archive", "get"], stdout: json(long) },
+      ],
+    });
+    expect(fromEnv.stdout).toContain(
+      "-o json --argo-server argo.example.internal:2746 -n argo` for untruncated values (raw argo output is not redacted)",
+    );
     const missing = run(["archive", "get", "ghost", ...server], {
       responses: [{ match: ["archive", "list"], stdout: "[]" }],
     });

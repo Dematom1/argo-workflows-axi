@@ -112,7 +112,7 @@ Values whose key looks sensitive (password, secret, token, api key, credential a
 
 ### Waiting, logs and output size
 
-Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod, are capped at 20,000 characters keeping the tail, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more; long messages are truncated with their total size, and only when something was cut does the output point at `--full` (or, for `archive get`, the raw `argo archive get <uid> -o json`).
+Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod, are capped at 20,000 characters keeping the tail, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more; long messages are truncated with their total size, and only when something was cut does the output point at `--full` (or, for `archive get`, which has no `--full`, the raw `argo archive get <uid> -o json --argo-server <host:port> -n <namespace>` for a human to run; that raw output is not redacted).
 
 ## Modes
 

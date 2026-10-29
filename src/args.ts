@@ -116,14 +116,20 @@ export function parseArgs(
       let value = inlineValue;
       if (value === undefined) {
         const next = argv[i + 1];
-        // A following token is a missing value only when it is itself one of
-        // this command's flags; `--priority -5` or `--grep -v` are values.
+        // A following `--...` token is never taken as a value: it is a flag,
+        // possibly misspelled, and swallowing it would silently drop it. A
+        // single-dash token is a value (`--priority -5`, `--grep -v`) unless
+        // it is one of this command's own short flags.
         const nextName = next === undefined ? undefined : next.split("=")[0];
         const nextFlag =
           nextName === undefined ? undefined : (aliases[nextName] ?? nextName);
+        if (next !== undefined && next.startsWith("--")) {
+          fail(
+            `${rawName} requires a value; pass \`${rawName}=<value>\` for a value that starts with --`,
+          );
+        }
         if (
           next === undefined ||
-          next === "--" ||
           (nextFlag !== undefined &&
             (valueFlags.has(nextFlag) || boolFlags.has(nextFlag)))
         ) {
