@@ -140,6 +140,16 @@ pnpm test
 
 Tests run the built CLI end to end against fake `argo` and `kubectl` executables (`test/fixtures/fake-cli.mjs`) with a hermetic `PATH`, `HOME` and `KUBECONFIG`. No test contacts a cluster or an Argo Server or reads real credentials. The fixtures are hand-built in the shape of `argo -o json` output for v3.7 and v4.1. Recording real fixtures needs a separately approved verification pass against a throwaway cluster.
 
+## Releases
+
+GitHub releases are published to npm as staged versions. After a release workflow stages a version, the maintainer must approve it with 2FA using `npm stage approve <id>` or on [npmjs.com](https://www.npmjs.com/).
+
+To recover a release whose publish job failed, run the `release-please` workflow manually with the existing release tag in its `tag` input. This skips release-please and runs the publish job against that tag. For example, in the repository root:
+
+```sh
+gh workflow run release-please.yml --ref main -f tag=argo-workflows-axi-v0.1.1
+```
+
 See [ROADMAP.md](ROADMAP.md) for what comes next, including the plan for adding writes.
 
 ## License
