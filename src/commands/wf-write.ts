@@ -882,11 +882,9 @@ async function submitSourceFromFile(
     declared: wf.spec?.arguments?.parameters ?? [],
     name: wf.metadata?.name,
     generateName: wf.metadata?.generateName,
-    lint: lint.ok
-      ? []
-      : lint.problems.length > 0
-        ? lint.problems
-        : ["lint failed"],
+    // lintFiles throws when argo fails without problem lines, so a failed
+    // lint always carries at least one problem here.
+    lint: lint.problems,
   };
 }
 

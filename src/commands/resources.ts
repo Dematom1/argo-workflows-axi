@@ -468,5 +468,12 @@ export async function archiveGet(args: string[]): Promise<Output> {
   if (matches.length > 1) {
     out.matches = `${matches.length} archived runs are named ${name}; showing the newest (uid ${uid})`;
   }
-  return redacted(out);
+  const result = redacted(out);
+  if (JSON.stringify(result).includes("(truncated,")) {
+    // No --full on archive get (not on the confirmed surface): the raw CLI is the fallback (S10).
+    result.help = [
+      `Ask a human to run \`argo archive get ${uid} -o json\` for untruncated values (Argo Server mode)`,
+    ];
+  }
+  return result;
 }

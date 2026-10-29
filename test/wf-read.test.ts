@@ -314,6 +314,31 @@ describe("wf logs", () => {
 });
 
 describe("wf wait", () => {
+  it("points at wf get --full when the summary was truncated", () => {
+    const done = {
+      ...d.runningIngest(),
+      spec: {
+        entrypoint: "main",
+        arguments: {
+          parameters: [{ name: "payload", value: "y".repeat(900) }],
+        },
+      },
+      status: {
+        phase: "Succeeded",
+        startedAt: d.ago(600),
+        finishedAt: d.ago(1),
+      },
+    };
+    const result = run(["wf", "wait", "ingest-q9w8e", "--timeout", "5s"], {
+      responses: [...KUBE_DEFAULTS, { match: ["get"], stdout: json(done) }],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("(truncated, 900 chars total)");
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get ingest-q9w8e --full`",
+    );
+  });
+
   it("returns the current state and a hint when the bounded wait times out (exit 0)", () => {
     const result = run(["wf", "wait", "ingest-q9w8e", "--timeout", "1s"], {
       responses: [

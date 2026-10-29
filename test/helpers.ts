@@ -61,17 +61,19 @@ export const KUBE_DEFAULTS: FakeResponse[] = [
   { bin: "kubectl", match: ["view", "--minify"], stdout: "argo" },
 ];
 
+const fakeBins = new Map<boolean, string>();
+
 /**
- * Run the built CLI hermetically: PATH is one temp dir holding only the fake
- * argo/kubectl shims and a `node` symlink, so no real binary is reachable; HOME and XDG_CONFIG_HOME are fresh temp dirs, KUBECONFIG points
- * nowhere, and no ARGO_* variable leaks in from the developer's shell.
+ * One fake-bin directory per test worker and kubectl variant. The shims take
+ * the scenario and log paths from the environment, so they can be shared;
+ * creating fresh executables for every run is slow on macOS, which inspects
+ * each new executable on first launch.
  */
-export function run(args: string[], options: RunOptions = {}): RunResult {
-  const dir = mkdtempSync(join(tmpdir(), "awf-axi-test-"));
-  const fakeBin = join(dir, "bin");
-  mkdirSync(fakeBin);
-  const names = options.noKubectl ? ["argo"] : ["argo", "kubectl"];
-  for (const name of names) {
+function fakeBinDir(noKubectl: boolean): string {
+  const existing = fakeBins.get(noKubectl);
+  if (existing) return existing;
+  const fakeBin = mkdtempSync(join(tmpdir(), "awf-axi-bin-"));
+  for (const name of noKubectl ? ["argo"] : ["argo", "kubectl"]) {
     const shim = join(fakeBin, name);
     writeFileSync(
       shim,
@@ -80,6 +82,20 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
     chmodSync(shim, 0o755);
   }
   symlinkSync(process.execPath, join(fakeBin, "node"));
+  fakeBins.set(noKubectl, fakeBin);
+  return fakeBin;
+}
+
+/**
+ * Run the built CLI hermetically: PATH is one temp dir holding only the fake
+ * argo/kubectl shims and a `node` symlink, so no real binary is reachable;
+ * HOME, XDG_CONFIG_HOME, the scenario and the call log are fresh per run,
+ * KUBECONFIG points nowhere, and no ARGO_* variable leaks in from the
+ * developer's shell.
+ */
+export function run(args: string[], options: RunOptions = {}): RunResult {
+  const dir = mkdtempSync(join(tmpdir(), "awf-axi-test-"));
+  const fakeBin = fakeBinDir(options.noKubectl ?? false);
   const home = join(dir, "home");
   mkdirSync(home);
 

@@ -687,6 +687,12 @@ export async function wfWait(args: string[]): Promise<Output> {
       `Run \`argo-workflows-axi wf logs ${wf.metadata.name}${suffix}\` for the failing step's logs`,
     ];
   }
+  if (JSON.stringify(result).includes("(truncated,")) {
+    result.help = [
+      ...((result.help as string[] | undefined) ?? []),
+      `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for untruncated messages and parameters`,
+    ];
+  }
   return result;
 }
 
