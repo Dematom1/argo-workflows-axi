@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -61,8 +62,8 @@ export const KUBE_DEFAULTS: FakeResponse[] = [
 ];
 
 /**
- * Run the built CLI hermetically: PATH holds only the fake argo/kubectl and
- * node, HOME and XDG_CONFIG_HOME are fresh temp dirs, KUBECONFIG points
+ * Run the built CLI hermetically: PATH is one temp dir holding only the fake
+ * argo/kubectl shims and a `node` symlink, so no real binary is reachable; HOME and XDG_CONFIG_HOME are fresh temp dirs, KUBECONFIG points
  * nowhere, and no ARGO_* variable leaks in from the developer's shell.
  */
 export function run(args: string[], options: RunOptions = {}): RunResult {
@@ -78,6 +79,7 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
     );
     chmodSync(shim, 0o755);
   }
+  symlinkSync(process.execPath, join(fakeBin, "node"));
   const home = join(dir, "home");
   mkdirSync(home);
 
@@ -99,7 +101,7 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
   const log = join(dir, "calls.jsonl");
 
   const env: Record<string, string> = {
-    PATH: `${fakeBin}:${dirname(process.execPath)}`,
+    PATH: fakeBin,
     HOME: home,
     XDG_CONFIG_HOME: configHome,
     KUBECONFIG: join(dir, "no-kubeconfig"),
