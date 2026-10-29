@@ -1,0 +1,22 @@
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  check:
+    name: PR title
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate conventional commit title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|chore|ci|docs|refactor|test|perf|build|revert)(\([^)]+\))?!?:\ .+ ]]; then
+            echo "PR title must be a conventional commit: $PR_TITLE"
+            exit 1
+          fi
