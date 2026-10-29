@@ -1,8 +1,8 @@
 import type { WriteOperationId } from "./registry.js";
 
 /**
- * Proof that the write gate approved one write. Only `src/gate.ts` mints these
- * (a test enforces it); the seam refuses to run a write operation without one.
+ * Proof that the write gate approved one write. `src/gate.ts` mints these;
+ * the seam refuses to run a write operation without one.
  */
 export interface WriteApproval {
   readonly op: WriteOperationId;

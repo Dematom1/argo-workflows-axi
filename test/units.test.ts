@@ -261,13 +261,17 @@ describe("redaction (S12)", () => {
       ],
       env: { API_KEY: "k", HOME: "/root" },
       author: "alice",
+      authorization: "raw-token-1",
+      headers: [{ name: "Authorization", value: "raw-token-2" }],
     });
     expect(value.parameters[0].value).toBe("[redacted]");
     expect(value.parameters[1].value).toBe("eu");
     expect(value.env.API_KEY).toBe("[redacted]");
     expect(value.env.HOME).toBe("/root");
     expect(value.author).toBe("alice");
-    expect(count).toBe(2);
+    expect(value.authorization).toBe("[redacted]");
+    expect(value.headers[0].value).toBe("[redacted]");
+    expect(count).toBe(4);
   });
 
   it("masks secrets in free text, best effort", () => {
@@ -276,6 +280,9 @@ describe("redaction (S12)", () => {
     const out = redactText(text);
     expect(out.text).not.toMatch(/hunter2|"abc"|abcdefghijklmnop|MII/);
     expect(out.count).toBeGreaterThanOrEqual(4);
+    const auth = redactText("authorization=abc123 author=alice");
+    expect(auth.text).toBe("authorization=[redacted] author=alice");
+    expect(auth.count).toBe(1);
   });
 });
 

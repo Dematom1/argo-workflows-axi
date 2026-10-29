@@ -66,6 +66,40 @@ describe("write gate", () => {
     expect(argoCalls(result)).toEqual([]);
   });
 
+  it("rejects empty target flag values before anything runs", () => {
+    for (const flags of [
+      ["--argo-server="],
+      ["-s", ""],
+      ["--context="],
+      ["-n", ""],
+    ]) {
+      const result = run(
+        ["wf", "stop", "ingest-q9w8e", ...EXPLICIT, ...flags, "--apply"],
+        {
+          responses: READS,
+          config: ALLOW,
+          env: { ARGO_SERVER: "prod-argo:2746" },
+        },
+      );
+      expect(result.exitCode, flags.join(" ")).toBe(2);
+      expect(result.stdout, flags.join(" ")).toContain(
+        "requires a non-empty value",
+      );
+      expect(result.calls, flags.join(" ")).toEqual([]);
+    }
+  });
+
+  it("never hands argo a blank ARGO_SERVER in Kubernetes-API mode", () => {
+    const result = run(["wf", "get", "ingest-q9w8e"], {
+      responses: READS,
+      env: { ARGO_SERVER: " " },
+    });
+    expect(result.exitCode).toBe(0);
+    const calls = result.calls.filter((c) => c.bin === "argo");
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.every((c) => c.argoServerEnv === null)).toBe(true);
+  });
+
   it("--apply on a target outside the allowlist is REFUSED and nothing is sent", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", ...EXPLICIT, "--apply"], {
       responses: READS,

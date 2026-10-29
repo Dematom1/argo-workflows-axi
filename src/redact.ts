@@ -8,7 +8,7 @@
 export const REDACTED = "[redacted]";
 
 const SENSITIVE_KEY =
-  /(pass(word|wd|phrase)?|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth(?!or)|bearer|session|cookie|signature|dsn|connection[-_]?string|client[-_]?key|ssh[-_]?key|cert(ificate)?[-_]?key)/i;
+  /(pass(word|wd|phrase)?|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth(?!or(?!i[sz]ation))|bearer|session|cookie|signature|dsn|connection[-_]?string|client[-_]?key|ssh[-_]?key|cert(ificate)?[-_]?key)/i;
 
 export function isSensitiveKey(key: string): boolean {
   return SENSITIVE_KEY.test(key);
@@ -85,7 +85,7 @@ export function redactValue<T>(input: T): Redacted<T> {
 }
 
 const PAIR_PATTERN =
-  /(["']?)([A-Za-z0-9_.-]*(?:pass(?:word|wd|phrase)?|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth(?!or)|bearer|session|cookie|signature|dsn)[A-Za-z0-9_.-]*)\1(\s*[=:]\s*)(["']?)([^\s"',;&]+)\4/gi;
+  /(["']?)([A-Za-z0-9_.-]*(?:pass(?:word|wd|phrase)?|secret|token|api[-_]?key|apikey|access[-_]?key|private[-_]?key|credential|auth(?!or(?!i[sz]ation))|bearer|session|cookie|signature|dsn)[A-Za-z0-9_.-]*)\1(\s*[=:]\s*)(["']?)([^\s"',;&]+)\4/gi;
 const BEARER_PATTERN = /\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/g;
 const PRIVATE_KEY_PATTERN =
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)/g;

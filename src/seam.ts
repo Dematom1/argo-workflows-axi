@@ -78,6 +78,7 @@ function spawn(
   options: ExecOptions,
 ): Promise<ExecResult> {
   const env = { ...process.env };
+  if (!env.ARGO_SERVER?.trim()) delete env.ARGO_SERVER;
   for (const name of options.unsetEnv ?? []) {
     delete env[name];
   }

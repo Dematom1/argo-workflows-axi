@@ -122,6 +122,9 @@ export function parseArgs(
         value = next;
         i += 1;
       }
+      if (value === "") {
+        fail(`${rawName} requires a non-empty value`);
+      }
       const existing = parsed.values.get(name);
       if (existing && !repeatable.has(name)) {
         fail(`${rawName} was given more than once`);
