@@ -33,6 +33,32 @@ const CRONS: FakeResponse[] = [
 ];
 
 describe("home view", () => {
+  it("degrades when the kubeconfig namespace read fails before current-context returns", () => {
+    const result = run([], {
+      responses: [
+        {
+          bin: "kubectl",
+          match: ["current-context"],
+          stdout: "kind-dev\n",
+          sleepMs: 3000,
+        },
+        {
+          bin: "kubectl",
+          match: ["view", "--minify"],
+          stderr: "error: something broke in kubeconfig\n",
+          exit: 1,
+        },
+        VERSION_OK,
+        { match: ["list", "--output=json"], stdout: json(WORKFLOWS) },
+        ...CRONS,
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=default",
+    );
+  });
+
   it("shows the target, a phase tally, failed and running workflows first, and the cron summary", () => {
     const result = run([], {
       responses: [

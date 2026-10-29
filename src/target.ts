@@ -77,21 +77,20 @@ export async function resolveTarget(parsed: ParsedArgs): Promise<Target> {
   };
 
   // Context and namespace lookups are independent local reads: run them together.
-  const contextLookup =
-    !args.context && mode === "kubernetes" ? currentContext() : undefined;
-  const namespaceLookup =
+  // Settle both before awaiting either, so a rejection never goes unhandled.
+  const [contextLookup, namespaceLookup] = await Promise.allSettled([
+    !args.context && mode === "kubernetes" ? currentContext() : undefined,
     !args.namespace && !process.env.ARGO_NAMESPACE
       ? contextNamespace(args.context)
-      : undefined;
+      : undefined,
+  ]);
 
   if (args.context) {
     target.context = args.context;
-  } else if (contextLookup) {
-    try {
-      target.context = await contextLookup;
-    } catch (error) {
-      target.contextUnavailable = errorMessage(error);
-    }
+  } else if (contextLookup.status === "fulfilled") {
+    target.context = contextLookup.value;
+  } else {
+    target.contextUnavailable = errorMessage(contextLookup.reason);
   }
 
   if (args.namespace) {
@@ -100,17 +99,11 @@ export async function resolveTarget(parsed: ParsedArgs): Promise<Target> {
   } else if (process.env.ARGO_NAMESPACE) {
     target.namespace = process.env.ARGO_NAMESPACE;
     target.namespaceSource = "ARGO_NAMESPACE";
-  } else if (namespaceLookup) {
-    try {
-      const ns = await namespaceLookup;
-      if (ns) {
-        target.namespace = ns;
-        target.namespaceSource = "kubeconfig";
-      }
-    } catch {
-      // Falls back to "default", like argo itself.
-    }
+  } else if (namespaceLookup.status === "fulfilled" && namespaceLookup.value) {
+    target.namespace = namespaceLookup.value;
+    target.namespaceSource = "kubeconfig";
   }
+  // Otherwise the namespace falls back to "default", like argo itself.
 
   return target;
 }
