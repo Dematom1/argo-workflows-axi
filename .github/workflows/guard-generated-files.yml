@@ -44,6 +44,13 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -eu
+          # The PR that introduces release-please bootstraps its manifest; the
+          # files only become generated once the base branch has the config.
+          if ! git cat-file -e "${BASE_SHA}:release-please-config.json" 2>/dev/null; then
+            echo "release-please is not configured on the base branch yet. OK."
+            exit 0
+          fi
+
           files=$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")
 
           violated=""
