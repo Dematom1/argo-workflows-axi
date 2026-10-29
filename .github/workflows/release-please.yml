@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to publish (for recovery)
+        required: false
+        type: string
 
 # Every job elevates only the scopes it needs.
 permissions: {}
@@ -15,6 +20,7 @@ concurrency:
 
 jobs:
   release-please:
+    if: ${{ inputs.tag == '' }}
     runs-on: ubuntu-latest
     permissions:
       # Commit the release PR's changes, then tag and create the GitHub release.
@@ -36,7 +42,7 @@ jobs:
   # of the release-please job above.
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ always() && (inputs.tag != '' || needs.release-please.outputs.release_created == 'true') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -44,9 +50,16 @@ jobs:
       # provenance, so no npm secret is stored.
       id-token: write
     steps:
+      - name: Validate recovery tag
+        if: ${{ inputs.tag != '' }}
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^argo-workflows-axi-v[0-9]+(\.[0-9]+)*([+-][0-9A-Za-z.-]+)?$ ]]
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: refs/tags/${{ inputs.tag || needs.release-please.outputs.tag_name }}
           persist-credentials: false
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -64,4 +77,22 @@ jobs:
       - run: pnpm run check:skill
       - run: pnpm test
 
-      - run: npm publish --access public --provenance
+      - name: Stage npm package
+        run: |
+          npm stage publish --access public --provenance --json > "$RUNNER_TEMP/stage-publish.json"
+          node --input-type=commonjs <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          let stageId;
+          try {
+            const result = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/stage-publish.json`, 'utf8'));
+            stageId = result[pkg.name]?.stageId;
+          } catch {}
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
+            `Stage ID: ${stageId || 'unavailable'}`,
+            `Package: ${pkg.name}`,
+            `Version: ${pkg.version}`,
+            'Waiting for approval: run axi-approve',
+            '',
+          ].join('\n'));
+          NODE

@@ -24,6 +24,6 @@ If you change `src/skill.ts` or the CLI description, run `pnpm run build:skill` 
 
 ## Releases
 
-Use conventional commit messages (`feat:`, `fix:`, `docs:`, ...). release-please turns them into a release PR on `main`; merging that PR tags the release and publishes to npm from `.github/workflows/release-please.yml` through npm trusted publishing with provenance (no stored npm token).
+Use conventional commit messages (`feat:`, `fix:`, `docs:`, ...). See [README.md#releases](README.md#releases) for the release and recovery process.
 
 - Do not hand-edit `CHANGELOG.md` or `.release-please-manifest.json`, and do not bump `package.json`'s `version` by hand. release-please owns them. `guard-generated-files.yml` fails a PR that edits the first two.
