@@ -603,6 +603,42 @@ describe("wf submit", () => {
     expect(argoCalls(applied)).toEqual([]);
   });
 
+  it("submits scalars as argo's YAML 1.1 decoding reads them", () => {
+    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
+    const file = join(dir, "scalars.yaml");
+    writeFileSync(
+      file,
+      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\nspec:\n  entrypoint: say\n  arguments:\n    artifacts:\n      - name: script\n        mode: 0755\n    parameters:\n      - name: flag\n        value: yes\n",
+    );
+    const result = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["lint"], stdout: "no linting errors found!\n" },
+        {
+          match: ["get", "hello"],
+          stderr: 'level=fatal msg="code = NotFound desc = not found"\n',
+          exit: 1,
+        },
+        { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).toBe(0);
+    const call = result.calls.find(
+      (c) => c.bin === "argo" && c.argv[0] === "submit",
+    );
+    const submitted = JSON.parse(call?.files[call.argv[1]] ?? "null") as {
+      spec: {
+        arguments: {
+          artifacts: Array<{ mode: unknown }>;
+          parameters: Array<{ value: unknown }>;
+        };
+      };
+    };
+    expect(submitted.spec.arguments.artifacts[0].mode).toBe(493);
+    expect(submitted.spec.arguments.parameters[0].value).toBe(true);
+  });
+
   it("rejects manifests the YAML parser reports problems for", () => {
     const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
     const file = join(dir, "dup.yaml");

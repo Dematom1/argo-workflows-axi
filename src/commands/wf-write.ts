@@ -752,7 +752,7 @@ interface Manifest {
 function readManifest(file: string, namespace: string): WorkflowManifest {
   const docs = parseAllDocuments(
     readFileSync(file === "-" ? 0 : file, "utf-8"),
-    { merge: true },
+    { version: "1.1" },
   );
   const problems = docs.flatMap((d) => [...d.errors, ...d.warnings]);
   if (problems.length > 0) {
