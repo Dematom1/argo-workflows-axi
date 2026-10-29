@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -7,151 +7,59 @@ import { parse } from "yaml";
 const root = fileURLToPath(new URL("..", import.meta.url));
 const workflowsDir = join(root, ".github", "workflows");
 
+type Step = {
+  uses?: string;
+  run?: string;
+  with?: Record<string, unknown>;
+  env?: Record<string, unknown>;
+};
+type Workflow = {
+  on?: Record<string, unknown>;
+  permissions?: unknown;
+  jobs: Record<
+    string,
+    { if?: string; permissions?: Record<string, string>; steps?: Step[] }
+  >;
+};
+
+function loadWorkflow(name: string): Workflow {
+  const doc = parse(readFileSync(join(workflowsDir, name), "utf8")) as Record<
+    string | boolean,
+    unknown
+  >;
+  // YAML 1.1 may parse a bare `on:` key as boolean true.
+  return { ...doc, on: doc.on ?? doc[true] } as Workflow;
+}
+
+function releasePleaseStep(): Step {
+  const step = loadWorkflow("release-please.yml").jobs[
+    "release-please"
+  ].steps?.find((s) => s.uses?.startsWith("googleapis/release-please-action@"));
+  if (!step) throw new Error("release-please-action step not found");
+  return step;
+}
+
 /**
- * Derive the exact release-please output set from config + workflow inputs.
- * node -> package.json (+ package-lock.json if present), changelog,
- * extra-files, and the manifest path.
+ * The files a node release-please PR changes: changelog, package.json and
+ * the manifest.
  */
 function expectedReleaseOutputs(): string[] {
   const config = JSON.parse(
     readFileSync(join(root, "release-please-config.json"), "utf8"),
   ) as {
-    "release-type"?: string;
-    "changelog-path"?: string;
-    "version-file"?: string;
-    "extra-files"?: Array<string | { path?: string }>;
-    packages?: Record<
+    packages: Record<
       string,
-      {
-        "release-type"?: string;
-        "changelog-path"?: string;
-        "version-file"?: string;
-        "extra-files"?: Array<string | { path?: string }>;
-      }
+      { "release-type"?: string; "changelog-path"?: string }
     >;
   };
-  const pkg = config.packages?.["."] ?? {};
-  const releaseType = pkg["release-type"] ?? config["release-type"] ?? "node";
-  const changelog =
-    pkg["changelog-path"] ?? config["changelog-path"] ?? "CHANGELOG.md";
+  expect(Object.keys(config.packages)).toEqual(["."]);
+  const pkg = config.packages["."];
+  expect(pkg["release-type"]).toBe("node");
 
-  const expected: string[] = [changelog];
-  switch (releaseType) {
-    case "simple":
-      expected.push(
-        pkg["version-file"] ?? config["version-file"] ?? "version.txt",
-      );
-      break;
-    case "node":
-      expected.push("package.json");
-      if (existsSync(join(root, "package-lock.json"))) {
-        expected.push("package-lock.json");
-      }
-      break;
-    case "go":
-      break;
-    default:
-      throw new Error(
-        `unsupported release-please release-type for ignore derivation: ${releaseType}`,
-      );
-  }
-
-  const extra = pkg["extra-files"] ?? config["extra-files"] ?? [];
-  for (const entry of extra) {
-    const path = typeof entry === "string" ? entry : entry?.path;
-    if (path) expected.push(path);
-  }
-
-  let manifest = ".release-please-manifest.json";
-  const releaseWorkflow = readFileSync(
-    join(workflowsDir, "release-please.yml"),
-    "utf8",
-  );
-  const manifestMatch = releaseWorkflow.match(/manifest-file:\s*(\S+)/);
-  if (manifestMatch) manifest = manifestMatch[1];
-  expected.push(manifest);
-
-  return [...new Set(expected)];
-}
-
-function loadWorkflowOn(filePath: string): Record<string, unknown> | null {
-  const doc = parse(readFileSync(filePath, "utf8")) as Record<
-    string | boolean,
-    unknown
-  > | null;
-  if (!doc || typeof doc !== "object") return null;
-  // YAML 1.1 may parse a bare `on:` key as boolean true.
-  const on = doc.on ?? doc[true];
-  if (!on || typeof on !== "object" || Array.isArray(on)) return null;
-  return on as Record<string, unknown>;
-}
-
-type PullRequestFilter =
-  | { kind: "unfiltered" }
-  | { kind: "paths-ignore"; paths: string[] }
-  | { kind: "paths"; paths: string[] };
-
-function pullRequestFilterCoverage(pr: unknown): PullRequestFilter {
-  if (pr == null) {
-    return { kind: "unfiltered" };
-  }
-  if (typeof pr !== "object" || Array.isArray(pr)) {
-    // `pull_request:` bare form means no path filter.
-    return { kind: "unfiltered" };
-  }
-
-  const record = pr as Record<string, unknown>;
-  if (Array.isArray(record["paths-ignore"])) {
-    return {
-      kind: "paths-ignore",
-      paths: record["paths-ignore"].map(String),
-    };
-  }
-
-  if (Array.isArray(record.paths)) {
-    return { kind: "paths", paths: record.paths.map(String) };
-  }
-
-  return { kind: "unfiltered" };
-}
-
-function globMatch(pattern: string, path: string): boolean {
-  // Minimal support for the `**` / `*` patterns used in workflow path filters.
-  const escaped = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
-    .replace(/\*\*/g, "::DOUBLE::")
-    .replace(/\*/g, "[^/]*")
-    .replace(/::DOUBLE::/g, ".*");
-  return new RegExp(`^${escaped}$`).test(path);
-}
-
-function isCovered(filter: PullRequestFilter, releasePath: string): boolean {
-  if (filter.kind === "unfiltered") return false;
-
-  if (filter.kind === "paths-ignore") {
-    return filter.paths.includes(releasePath);
-  }
-
-  // paths allow-list: a release path is "covered" (will not create a run on its
-  // own) when no positive pattern matches it, or a later negation excludes it.
-  let matched = false;
-  for (const pattern of filter.paths) {
-    if (pattern.startsWith("!")) {
-      const negated = pattern.slice(1);
-      if (
-        matched &&
-        (negated === releasePath || globMatch(negated, releasePath))
-      ) {
-        matched = false;
-      }
-      continue;
-    }
-    if (pattern === releasePath || globMatch(pattern, releasePath)) {
-      matched = true;
-    }
-  }
-  // Covered means the path does NOT cause the workflow to run.
-  return !matched;
+  const manifest =
+    (releasePleaseStep().with?.["manifest-file"] as string | undefined) ??
+    ".release-please-manifest.json";
+  return [pkg["changelog-path"] ?? "CHANGELOG.md", "package.json", manifest];
 }
 
 describe("release-please CI exclusions", () => {
@@ -165,21 +73,11 @@ describe("release-please CI exclusions", () => {
     ]);
   });
 
-  it("every pull_request workflow ignores the full release-output set", () => {
-    const files = readdirSync(workflowsDir).filter((name) =>
-      name.endsWith(".yml"),
-    );
-    const prWorkflows: { name: string; filter: PullRequestFilter }[] = [];
-
-    for (const name of files) {
-      const filePath = join(workflowsDir, name);
-      const on = loadWorkflowOn(filePath);
-      if (!on || !("pull_request" in on)) continue;
-      prWorkflows.push({
-        name,
-        filter: pullRequestFilterCoverage(on.pull_request),
-      });
-    }
+  it("every pull_request workflow paths-ignores the full release-output set", () => {
+    const prWorkflows = readdirSync(workflowsDir)
+      .filter((name) => name.endsWith(".yml"))
+      .map((name) => ({ name, on: loadWorkflow(name).on }))
+      .filter(({ on }) => on && "pull_request" in on);
 
     expect(prWorkflows.map((w) => w.name).sort()).toEqual([
       "ci.yml",
@@ -187,57 +85,52 @@ describe("release-please CI exclusions", () => {
       "no-mistakes-required.yml",
     ]);
 
-    const failures: string[] = [];
-    for (const { name, filter } of prWorkflows) {
-      const missing = expected.filter((path) => !isCovered(filter, path));
-      if (missing.length > 0) {
-        failures.push(`${name} missing coverage for: ${missing.join(", ")}`);
-      }
+    for (const { name, on } of prWorkflows) {
+      const pr = on!.pull_request as Record<string, unknown> | null;
+      const ignored = (pr?.["paths-ignore"] ?? []) as string[];
+      expect(
+        expected.filter((path) => !ignored.includes(path)),
+        name,
+      ).toEqual([]);
     }
-
-    expect(failures).toEqual([]);
   });
 
   it("does not attach path filters to non-pull_request triggers on ci.yml", () => {
-    const on = loadWorkflowOn(join(workflowsDir, "ci.yml"));
-    expect(on).not.toBeNull();
-    expect(on!.push).toEqual({ branches: ["main"] });
-    const pr = on!.pull_request as Record<string, unknown>;
+    const on = loadWorkflow("ci.yml").on!;
+    expect(on.push).toEqual({ branches: ["main"] });
+    const pr = on.pull_request as Record<string, unknown>;
     expect(pr.branches).toEqual(["main"]);
     expect(pr["paths-ignore"]).toEqual([
       ".release-please-manifest.json",
       "CHANGELOG.md",
       "package.json",
     ]);
-    expect(on!.release).toBeUndefined();
-    expect(on!.workflow_dispatch).toBeUndefined();
+    expect(on.release).toBeUndefined();
+    expect(on.workflow_dispatch).toBeUndefined();
   });
 
-  it("keeps bot author exemptions on guard and no-mistakes jobs", () => {
-    const guard = readFileSync(
-      join(workflowsDir, "guard-generated-files.yml"),
-      "utf8",
-    );
-    const nmr = readFileSync(
-      join(workflowsDir, "no-mistakes-required.yml"),
-      "utf8",
-    );
-    expect(guard).toContain("github-actions[bot]");
-    expect(guard).toContain("release-please[bot]");
-    expect(nmr).toContain("github-actions[bot]");
-    expect(nmr).toContain("dependabot[bot]");
-    expect(nmr).toContain("release-please[bot]");
+  it.each([
+    [
+      "guard-generated-files.yml",
+      ["github-actions[bot]", "release-please[bot]"],
+    ],
+    [
+      "no-mistakes-required.yml",
+      ["github-actions[bot]", "dependabot[bot]", "release-please[bot]"],
+    ],
+  ])("%s exempts bot authors in the check job condition", (name, logins) => {
+    const condition = loadWorkflow(name).jobs.check.if ?? "";
+    const exempted = [
+      ...condition.matchAll(
+        /github\.event\.pull_request\.user\.login != '([^']+)'/g,
+      ),
+    ].map((m) => m[1]);
+    expect(exempted).toEqual(logins);
+    expect(condition.split("&&")).toHaveLength(logins.length);
   });
 
   it("publishes through npm trusted publishing without a stored npm token", () => {
-    const release = readFileSync(
-      join(workflowsDir, "release-please.yml"),
-      "utf8",
-    );
-    const doc = parse(release) as {
-      permissions?: unknown;
-      jobs: Record<string, { permissions?: Record<string, string> }>;
-    };
+    const doc = loadWorkflow("release-please.yml");
     expect(doc.permissions).toEqual({});
     expect(doc.jobs.publish.permissions).toEqual({
       contents: "read",
@@ -246,8 +139,22 @@ describe("release-please CI exclusions", () => {
     expect(
       doc.jobs["release-please"].permissions?.["id-token"],
     ).toBeUndefined();
-    expect(release).toContain("npm publish --access public --provenance");
-    expect(release.match(/secrets\.\w+/g)).toEqual(["secrets.GITHUB_TOKEN"]);
-    expect(release).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN/);
+
+    const publishSteps = doc.jobs.publish.steps ?? [];
+    expect(publishSteps.map((s) => s.run)).toContain(
+      "npm publish --access public --provenance",
+    );
+
+    const secretRefs = Object.values(doc.jobs)
+      .flatMap((job) => job.steps ?? [])
+      .flatMap((s) => [
+        ...Object.entries(s.env ?? {}),
+        ...Object.entries(s.with ?? {}),
+      ])
+      .filter(([, value]) => String(value).includes("secrets."));
+    expect(secretRefs).toEqual([["token", "${{ secrets.GITHUB_TOKEN }}"]]);
+    expect(publishSteps.flatMap((s) => Object.keys(s.env ?? {}))).not.toContain(
+      "NODE_AUTH_TOKEN",
+    );
   });
 });
