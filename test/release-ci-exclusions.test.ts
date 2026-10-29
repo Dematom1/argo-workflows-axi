@@ -50,7 +50,9 @@ describe("release-please publishing", () => {
     expect(
       publishSteps.find((step) => step.uses?.startsWith("actions/checkout@"))
         ?.with?.ref,
-    ).toBe("refs/tags/${{ inputs.tag || needs.release-please.outputs.tag_name }}");
+    ).toBe(
+      "refs/tags/${{ inputs.tag || needs.release-please.outputs.tag_name }}",
+    );
 
     const secretRefs = Object.values(doc.jobs)
       .flatMap((job) => job.steps ?? [])
