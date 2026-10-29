@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
     branches: [main]
+    # Never create a run for a release-please PR. The job-level author exemption
+    # below cannot do this: it is evaluated inside a run, and a GITHUB_TOKEN PR's
+    # run is created in action_required and never starts.
+    paths-ignore:
+      - .release-please-manifest.json
+      - CHANGELOG.md
+      - package.json
 
 permissions:
   contents: read
@@ -13,6 +20,14 @@ jobs:
   check:
     name: PR must be raised via no-mistakes
     runs-on: ubuntu-latest
+    # Known automation accounts are exempt so the release pipeline keeps working:
+    # - github-actions[bot] opens the release-please PR via GITHUB_TOKEN
+    # - dependabot[bot] opens dependency update PRs
+    # Other authors (human or bot) must raise PRs through `git push no-mistakes`.
+    if: >-
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'release-please[bot]'
     steps:
       - name: Verify no-mistakes signature and pipeline attestation in PR body
         uses: kunchenguid/no-mistakes/.github/actions/require-no-mistakes@f6441c96c352a18b9cadcaef6b6c7017e9ac3970 # v1.80.1

@@ -184,6 +184,7 @@ describe("release-please CI exclusions", () => {
     expect(prWorkflows.map((w) => w.name).sort()).toEqual([
       "ci.yml",
       "guard-generated-files.yml",
+      "no-mistakes-required.yml",
     ]);
 
     const failures: string[] = [];
@@ -212,13 +213,20 @@ describe("release-please CI exclusions", () => {
     expect(on!.workflow_dispatch).toBeUndefined();
   });
 
-  it("keeps bot author exemptions on the guard job", () => {
+  it("keeps bot author exemptions on guard and no-mistakes jobs", () => {
     const guard = readFileSync(
       join(workflowsDir, "guard-generated-files.yml"),
       "utf8",
     );
+    const nmr = readFileSync(
+      join(workflowsDir, "no-mistakes-required.yml"),
+      "utf8",
+    );
     expect(guard).toContain("github-actions[bot]");
     expect(guard).toContain("release-please[bot]");
+    expect(nmr).toContain("github-actions[bot]");
+    expect(nmr).toContain("dependabot[bot]");
+    expect(nmr).toContain("release-please[bot]");
   });
 
   it("publishes through npm trusted publishing without a stored npm token", () => {
