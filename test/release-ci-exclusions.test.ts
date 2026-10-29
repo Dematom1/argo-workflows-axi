@@ -45,7 +45,7 @@ describe("release-please publishing", () => {
 
     const publishSteps = doc.jobs.publish.steps ?? [];
     expect(publishSteps.map((s) => s.run)).toContain(
-      "npm publish --access public --provenance",
+      "npm stage publish --access public --provenance",
     );
 
     const secretRefs = Object.values(doc.jobs)
