@@ -472,7 +472,8 @@ export async function archiveGet(args: string[]): Promise<Output> {
   if (JSON.stringify(result).includes("(truncated,")) {
     // No --full on archive get (not on the confirmed surface): the raw CLI is the fallback (S10).
     result.help = [
-      `Ask a human to run \`argo archive get ${uid} -o json\` for untruncated values (Argo Server mode)`,
+      // argo takes the same target flags, so the copied command lands on the same server.
+      `Ask a human to run \`argo archive get ${uid} -o json${targetSuffix(parsed)}\` for untruncated values (Argo Server mode)`,
     ];
   }
   return result;

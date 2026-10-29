@@ -13,6 +13,7 @@ import {
   appendFileSync,
   existsSync,
   readFileSync,
+  renameSync,
   writeFileSync,
   writeSync,
 } from "node:fs";
@@ -53,8 +54,15 @@ if (index === -1) {
   process.exit(1);
 }
 
-used[index] = (used[index] ?? 0) + 1;
-if (statePath) writeFileSync(statePath, JSON.stringify(used));
+// Use counts matter only for responses limited by `times`. The CLI can run
+// fakes concurrently (context and namespace lookups), so only touch the state
+// file when needed and replace it atomically: a reader never sees a partial file.
+if (statePath && scenario.responses[index].times !== undefined) {
+  used[index] = (used[index] ?? 0) + 1;
+  const tmp = `${statePath}.${process.pid}.tmp`;
+  writeFileSync(tmp, JSON.stringify(used));
+  renameSync(tmp, statePath);
+}
 
 const response = scenario.responses[index];
 if (response.writeFile)

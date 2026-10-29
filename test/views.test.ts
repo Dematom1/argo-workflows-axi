@@ -291,6 +291,24 @@ describe("archive get", () => {
       "--namespace=argo",
       "--loglevel=error",
     ]);
+    const long = d.failedEtl() as {
+      spec: {
+        arguments: { parameters: Array<{ name: string; value: string }> };
+      };
+    };
+    long.spec.arguments.parameters.push({
+      name: "payload",
+      value: "z".repeat(800),
+    });
+    const truncated = run(["archive", "get", "nightly-etl-x7k2p", ...server], {
+      responses: [
+        { match: ["archive", "list"], stdout: json([d.failedEtl()]) },
+        { match: ["archive", "get"], stdout: json(long) },
+      ],
+    });
+    expect(truncated.stdout).toContain(
+      "Ask a human to run `argo archive get 11111111-2222-4333-8444-555555555555 -o json --argo-server argo.example.internal:2746 -n argo`",
+    );
     const missing = run(["archive", "get", "ghost", ...server], {
       responses: [{ match: ["archive", "list"], stdout: "[]" }],
     });
