@@ -1,7 +1,15 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { parseAllDocuments } from "yaml";
+import {
+  isMap,
+  isScalar,
+  parseAllDocuments,
+  visit,
+  type Document,
+  type Scalar,
+  type YAMLMap,
+} from "yaml";
 import {
   TARGET_FLAGS,
   ALL_NAMESPACES_FLAG,
@@ -744,67 +752,119 @@ type WorkflowManifest = Workflow & {
 };
 
 interface Manifest {
-  /** Private temp file holding exactly the checked manifest, as JSON. */
+  /** File holding the user's manifest bytes unchanged: the original path, or a private copy of stdin. */
   path: string;
   wf: WorkflowManifest;
 }
 
-function readManifest(file: string, namespace: string): WorkflowManifest {
-  const docs = parseAllDocuments(
-    readFileSync(file === "-" ? 0 : file, "utf-8"),
-    { version: "1.1" },
+function invalidManifest(message: string, help: string): never {
+  throw axiError(message, "VALIDATION_ERROR", [help]);
+}
+
+const PLAIN_METADATA_HELP =
+  "Write the top level and metadata as plain YAML: no anchors, aliases, merge keys (<<) or explicit tags";
+
+function hasPlainKeys(map: YAMLMap): boolean {
+  return map.items.every(
+    (pair) =>
+      isScalar(pair.key) &&
+      typeof pair.key.value === "string" &&
+      !pair.key.tag &&
+      !pair.key.anchor,
   );
+}
+
+/** Our view of metadata must be argo's: the top level and metadata use no YAML indirection. */
+function assertPlainMetadata(doc: Document): void {
+  const root = doc.contents;
+  if (!isMap(root) || root.tag || root.anchor || !hasPlainKeys(root)) {
+    invalidManifest(
+      "The manifest's top level must be a plain mapping",
+      PLAIN_METADATA_HELP,
+    );
+  }
+  const metadata = root.items.find(
+    (pair) => (pair.key as Scalar).value === "metadata",
+  )?.value;
+  if (metadata === undefined || metadata === null) return;
+  let plain = isMap(metadata);
+  if (plain) {
+    visit(metadata as YAMLMap, {
+      Alias: () => {
+        plain = false;
+        return visit.BREAK;
+      },
+      Node: (_, node) => {
+        if (node.tag || node.anchor || (isMap(node) && !hasPlainKeys(node))) {
+          plain = false;
+          return visit.BREAK;
+        }
+      },
+    });
+  }
+  if (!plain) {
+    invalidManifest(
+      "The manifest's metadata must be plain YAML",
+      PLAIN_METADATA_HELP,
+    );
+  }
+}
+
+function readManifest(text: string, namespace: string): WorkflowManifest {
+  const docs = parseAllDocuments(text, { version: "1.1" });
   const problems = docs.flatMap((d) => [...d.errors, ...d.warnings]);
   if (problems.length > 0) {
-    throw axiError(
+    invalidManifest(
       `The manifest is not valid YAML: ${problems[0].message.split("\n")[0]}`,
-      "VALIDATION_ERROR",
-      ["Fix the manifest, then preview again"],
+      "Fix the manifest, then preview again",
     );
   }
-  const manifests = docs
-    .map((d) => d.toJSON() as Record<string, unknown> | null)
-    .filter(Boolean) as Array<Record<string, unknown>>;
+  const manifests = docs.filter((d) => d.contents !== null);
   if (manifests.length !== 1) {
-    throw axiError(
+    invalidManifest(
       `Expected exactly one manifest in the file, found ${manifests.length}`,
-      "VALIDATION_ERROR",
-      ["Split the file and submit one workflow per call"],
+      "Split the file and submit one workflow per call",
     );
   }
-  const wf = manifests[0] as unknown as WorkflowManifest;
+  assertPlainMetadata(manifests[0]);
+  const wf = manifests[0].toJSON() as WorkflowManifest;
   if (wf.kind !== "Workflow") {
-    throw axiError(
+    invalidManifest(
       `Expected kind Workflow, found ${String(wf.kind)}`,
-      "VALIDATION_ERROR",
-      [
-        "To run a WorkflowTemplate or CronWorkflow, use `wf submit --from workflowtemplate/<name>` or `--from cronwf/<name>`",
-      ],
+      "To run a WorkflowTemplate or CronWorkflow, use `wf submit --from workflowtemplate/<name>` or `--from cronwf/<name>`",
     );
+  }
+  for (const field of ["name", "generateName", "namespace"] as const) {
+    const value: unknown = wf.metadata?.[field];
+    if (value !== undefined && typeof value !== "string") {
+      invalidManifest(
+        `The manifest's metadata.${field} must be a string`,
+        `Quote metadata.${field} in the manifest`,
+      );
+    }
   }
   const manifestNamespace = wf.metadata?.namespace;
   if (manifestNamespace && manifestNamespace !== namespace) {
-    throw axiError(
+    invalidManifest(
       `The manifest sets metadata.namespace ${manifestNamespace}, but the target namespace is ${namespace}`,
-      "VALIDATION_ERROR",
-      [
-        `Pass \`-n ${manifestNamespace}\`, or remove metadata.namespace from the manifest`,
-      ],
+      `Pass \`-n ${manifestNamespace}\`, or remove metadata.namespace from the manifest`,
     );
   }
   return wf;
 }
 
-/** Submit only what was checked: the normalized manifest, written to a private temp file. */
+/** Check the manifest, then lint and submit the user's own bytes so argo alone decodes the spec. */
 async function withManifest<T>(
   file: string,
   namespace: string,
   fn: (manifest: Manifest) => Promise<T>,
 ): Promise<T> {
-  const wf = readManifest(file, namespace);
+  const bytes = readFileSync(file === "-" ? 0 : file);
+  const wf = readManifest(bytes.toString("utf-8"), namespace);
+  if (file !== "-") return fn({ path: file, wf });
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
-  const path = join(dir, "manifest.json");
-  writeFileSync(path, JSON.stringify(wf), { mode: 0o600 });
+  const path = join(dir, "stdin.yaml");
+  writeFileSync(path, bytes, { mode: 0o600 });
   try {
     return await fn({ path, wf });
   } finally {

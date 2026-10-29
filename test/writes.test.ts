@@ -578,72 +578,55 @@ describe("wf submit", () => {
     expect(writeCalls(applied)).toEqual([]);
   });
 
-  it("resolves YAML merge keys before the namespace check, in preview and on --apply", () => {
-    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
-    const file = join(dir, "merge.yaml");
-    writeFileSync(
-      file,
-      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nx: &ns\n  namespace: prod\nmetadata:\n  <<: *ns\n  name: hello\nspec:\n  entrypoint: say\n",
-    );
-    const responses: FakeResponse[] = [
-      ...KUBE_DEFAULTS,
-      { match: ["lint"], stdout: "no linting errors found!\n" },
-      { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
-    ];
-    const preview = run(["wf", "submit", file], { responses, config: ALLOW });
-    expect(preview.exitCode).toBe(2);
-    expect(preview.stdout).toContain("metadata.namespace prod");
-    expect(argoCalls(preview)).toEqual([]);
-    const applied = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
-      responses,
-      config: ALLOW,
-    });
-    expect(applied.exitCode).toBe(2);
-    expect(applied.stdout).toContain("metadata.namespace prod");
-    expect(argoCalls(applied)).toEqual([]);
-  });
+  const SUBMIT_OK: FakeResponse[] = [
+    ...KUBE_DEFAULTS,
+    { match: ["lint"], stdout: "no linting errors found!\n" },
+    {
+      match: ["get", "hello"],
+      stderr: 'level=fatal msg="code = NotFound desc = not found"\n',
+      exit: 1,
+    },
+    { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
+  ];
 
-  it("submits scalars as argo's YAML 1.1 decoding reads them", () => {
-    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
-    const file = join(dir, "scalars.yaml");
-    writeFileSync(
-      file,
-      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\nspec:\n  entrypoint: say\n  arguments:\n    artifacts:\n      - name: script\n        mode: 0755\n    parameters:\n      - name: flag\n        value: yes\n",
-    );
-    const result = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
-      responses: [
-        ...KUBE_DEFAULTS,
-        { match: ["lint"], stdout: "no linting errors found!\n" },
-        {
-          match: ["get", "hello"],
-          stderr: 'level=fatal msg="code = NotFound desc = not found"\n',
-          exit: 1,
-        },
-        { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
-      ],
-      config: ALLOW,
-    });
-    expect(result.exitCode).toBe(0);
-    const call = result.calls.find(
-      (c) => c.bin === "argo" && c.argv[0] === "submit",
-    );
-    const submitted = JSON.parse(call?.files[call.argv[1]] ?? "null") as {
-      spec: {
-        arguments: {
-          artifacts: Array<{ mode: unknown }>;
-          parameters: Array<{ value: unknown }>;
-        };
-      };
+  function specFile(name: string, text: string): string {
+    const file = join(mkdtempSync(join(tmpdir(), "awf-axi-spec-")), name);
+    writeFileSync(file, text);
+    return file;
+  }
+
+  it("blocks YAML indirection in the top level or metadata, in preview and on --apply", () => {
+    const manifests = {
+      "merge key namespace":
+        "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nx: &ns\n  namespace: prod\nmetadata:\n  <<: *ns\n  name: hello\nspec:\n  entrypoint: say\n",
+      "top-level merge key":
+        "kind: Workflow\nx: &m\n  metadata:\n    namespace: prod\n<<: *m\nspec:\n  entrypoint: say\n",
+      "alias in metadata":
+        "kind: Workflow\nx: &ns prod\nmetadata:\n  name: hello\n  namespace: *ns\nspec:\n  entrypoint: say\n",
+      "alias for metadata":
+        "kind: Workflow\nx: &m\n  namespace: prod\nmetadata: *m\nspec:\n  entrypoint: say\n",
+      "tag in metadata":
+        "kind: Workflow\nmetadata:\n  name: hello\n  namespace: !!str prod\nspec:\n  entrypoint: say\n",
+      "non-string namespace":
+        "kind: Workflow\nmetadata:\n  name: hello\n  namespace: 2024-01-01\nspec:\n  entrypoint: say\n",
     };
-    expect(submitted.spec.arguments.artifacts[0].mode).toBe(493);
-    expect(submitted.spec.arguments.parameters[0].value).toBe(true);
+    for (const [label, text] of Object.entries(manifests)) {
+      const file = specFile("indirect.yaml", text);
+      for (const extra of [[], [...EXPLICIT, "--apply"]]) {
+        const result = run(["wf", "submit", file, ...extra], {
+          responses: SUBMIT_OK,
+          config: ALLOW,
+        });
+        expect(result.exitCode, label).toBe(2);
+        expect(result.stdout, label).toContain("code: VALIDATION_ERROR");
+        expect(argoCalls(result), label).toEqual([]);
+      }
+    }
   });
 
   it("rejects manifests the YAML parser reports problems for", () => {
-    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
-    const file = join(dir, "dup.yaml");
-    writeFileSync(
-      file,
+    const file = specFile(
+      "dup.yaml",
       "kind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\n  namespace: prod\n",
     );
     const result = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
@@ -652,41 +635,41 @@ describe("wf submit", () => {
     expect(argoCalls(result)).toEqual([]);
   });
 
-  it("lints and submits exactly the checked manifest, normalized to JSON", () => {
-    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
-    const file = join(dir, "anchors.yaml");
-    writeFileSync(
-      file,
-      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nx: &meta\n  namespace: argo\nmetadata:\n  <<: *meta\n  name: hello\nspec:\n  entrypoint: say\n",
-    );
+  const PASSTHROUGH =
+    "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\nx: &defaults\n  mode: 0755\nspec:\n  entrypoint: say\n  arguments:\n    artifacts:\n      - name: script\n        <<: *defaults\n    parameters:\n      - name: run-date\n        value: 2024-01-01\n      - name: at\n        value: 12:30\n      - name: flag\n        value: yes\n";
+
+  it("lints and submits the original manifest file unchanged", () => {
+    const file = specFile("passthrough.yaml", PASSTHROUGH);
     const result = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
-      responses: [
-        ...KUBE_DEFAULTS,
-        { match: ["lint"], stdout: "no linting errors found!\n" },
-        {
-          match: ["get", "hello"],
-          stderr: 'level=fatal msg="code = NotFound desc = not found"\n',
-          exit: 1,
-        },
-        { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
-      ],
+      responses: SUBMIT_OK,
       config: ALLOW,
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("result: submitted");
-    const expected = {
-      apiVersion: "argoproj.io/v1alpha1",
-      kind: "Workflow",
-      x: { namespace: "argo" },
-      metadata: { namespace: "argo", name: "hello" },
-      spec: { entrypoint: "say" },
-    };
     for (const verb of ["lint", "submit"]) {
       const call = result.calls.find(
         (c) => c.bin === "argo" && c.argv[0] === verb,
       );
-      expect(call?.argv[1]).not.toBe(file);
-      expect(JSON.parse(call?.files[call.argv[1]] ?? "null")).toEqual(expected);
+      expect(call?.argv[1]).toBe(file);
+      expect(call?.files[file]).toBe(PASSTHROUGH);
+    }
+  });
+
+  it("lints and submits stdin's exact bytes from a private temp file", () => {
+    const result = run(["wf", "submit", "-", ...EXPLICIT, "--apply"], {
+      stdin: PASSTHROUGH,
+      responses: SUBMIT_OK,
+      config: ALLOW,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("result: submitted");
+    for (const verb of ["lint", "submit"]) {
+      const call = result.calls.find(
+        (c) => c.bin === "argo" && c.argv[0] === verb,
+      );
+      const path = call?.argv[1] ?? "";
+      expect(path).toMatch(/argo-workflows-axi-.*stdin\.yaml$/);
+      expect(call?.files[path]).toBe(PASSTHROUGH);
     }
   });
 });
