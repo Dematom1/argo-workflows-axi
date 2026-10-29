@@ -31,14 +31,6 @@ function loadWorkflow(name: string): Workflow {
   return { ...doc, on: doc.on ?? doc[true] } as Workflow;
 }
 
-function releasePleaseStep(): Step {
-  const step = loadWorkflow("release-please.yml").jobs[
-    "release-please"
-  ].steps?.find((s) => s.uses?.startsWith("googleapis/release-please-action@"));
-  if (!step) throw new Error("release-please-action step not found");
-  return step;
-}
-
 describe("release-please publishing", () => {
   it("publishes through npm trusted publishing without a stored npm token", () => {
     const doc = loadWorkflow("release-please.yml");
