@@ -226,8 +226,18 @@ describe("release-please CI exclusions", () => {
       join(workflowsDir, "release-please.yml"),
       "utf8",
     );
-    const doc = parse(release) as { permissions?: Record<string, string> };
-    expect(doc.permissions?.["id-token"]).toBe("write");
+    const doc = parse(release) as {
+      permissions?: unknown;
+      jobs: Record<string, { permissions?: Record<string, string> }>;
+    };
+    expect(doc.permissions).toEqual({});
+    expect(doc.jobs.publish.permissions).toEqual({
+      contents: "read",
+      "id-token": "write",
+    });
+    expect(
+      doc.jobs["release-please"].permissions?.["id-token"],
+    ).toBeUndefined();
     expect(release).toContain("npm publish --access public --provenance");
     expect(release.match(/secrets\.\w+/g)).toEqual(["secrets.GITHUB_TOKEN"]);
     expect(release).not.toMatch(/NODE_AUTH_TOKEN|NPM_TOKEN/);
