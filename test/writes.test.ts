@@ -403,7 +403,7 @@ describe("wf submit", () => {
         "wf",
         "submit",
         "--from",
-        "template/nightly-etl",
+        "workflowtemplate/nightly-etl",
         "-p",
         "region=us",
         "--name",
@@ -437,7 +437,7 @@ describe("wf submit", () => {
         "wf",
         "submit",
         "--from",
-        "template/nightly-etl",
+        "workflowtemplate/nightly-etl",
         "-p",
         "date=2026-10-28",
         "--name",
@@ -476,7 +476,7 @@ describe("wf submit", () => {
         "wf",
         "submit",
         "--from",
-        "cron/nightly-etl",
+        "cronwf/nightly-etl",
         "--name",
         "nightly-etl-x7k2p",
         ...EXPLICIT,
@@ -529,10 +529,52 @@ describe("wf submit", () => {
     const wrongKind = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
     expect(wrongKind.exitCode).toBe(2);
     expect(wrongKind.stdout).toContain("Expected kind Workflow");
-    const both = run(["wf", "submit", file, "--from", "template/x"]);
+    const both = run(["wf", "submit", file, "--from", "workflowtemplate/x"]);
     expect(both.exitCode).toBe(2);
     expect(both.stdout).toContain("Pass exactly one of a manifest file");
-    const badKind = run(["wf", "submit", "--from", "pod/x"]);
-    expect(badKind.stdout).toContain("--from must be <kind>/<name>");
+    for (const kind of ["pod", "template", "clustertemplate", "cron"]) {
+      const badKind = run(["wf", "submit", "--from", `${kind}/x`]);
+      expect(badKind.exitCode).toBe(2);
+      expect(badKind.stdout).toContain("--from must be <kind>/<name>");
+      expect(badKind.calls).toEqual([]);
+    }
+  });
+
+  it("accepts argo's own spellings of the --from kinds", () => {
+    const result = run(
+      ["wf", "submit", "--from", "wftmpl/nightly-etl", "-p", "date=x"],
+      { responses: TEMPLATE_READS },
+    );
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("source: workflowtemplate/nightly-etl");
+  });
+
+  it("blocks a manifest whose metadata.namespace differs from the target, in preview and on --apply", () => {
+    const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
+    const file = join(dir, "prod.yaml");
+    writeFileSync(
+      file,
+      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\n  namespace: prod\nspec:\n  entrypoint: say\n",
+    );
+    const responses: FakeResponse[] = [
+      ...KUBE_DEFAULTS,
+      { match: ["lint"], stdout: "no linting errors found!\n" },
+      {
+        match: ["get", "hello"],
+        stderr: 'level=fatal msg="code = NotFound desc = not found"\n',
+        exit: 1,
+      },
+      { match: ["submit"], stdout: json({ metadata: { name: "hello" } }) },
+    ];
+    const preview = run(["wf", "submit", file], { responses, config: ALLOW });
+    expect(preview.exitCode).toBe(2);
+    expect(preview.stdout).toContain("metadata.namespace prod");
+    const applied = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
+      responses,
+      config: ALLOW,
+    });
+    expect(applied.exitCode).toBe(2);
+    expect(applied.stdout).toContain("code: VALIDATION_ERROR");
+    expect(writeCalls(applied)).toEqual([]);
   });
 });

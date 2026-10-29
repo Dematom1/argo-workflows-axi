@@ -47,7 +47,7 @@ After the first release: `npm install -g argo-workflows-axi`, or run it ad hoc w
 
 You only need one of these.
 
-- **Session hook (recommended).** `argo-workflows-axi setup hooks` installs a SessionStart hook for Claude Code, Codex and OpenCode (`--project` for the current repository only). At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
+- **Session hook (recommended).** `argo-workflows-axi setup hooks` installs a user-scope SessionStart hook for Claude Code, Codex and OpenCode. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
 - **Skill.** `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi` installs a small skill that tells the agent when to reach for the tool. It defers all guidance to the CLI's own `--help`.
 
 ## Commands

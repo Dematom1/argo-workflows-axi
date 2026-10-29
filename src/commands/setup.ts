@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { installSessionStartHooks, sessionStartHookStatus } from "axi-sdk-js";
-import { hasFlag, parseArgs, requirePositionals } from "../args.js";
+import { parseArgs, requirePositionals } from "../args.js";
 import { axiError } from "../errors.js";
 
 /**
@@ -11,14 +11,9 @@ import { axiError } from "../errors.js";
  */
 
 export const SETUP_HELP = `command: argo-workflows-axi setup hooks
-description: Install or repair SessionStart hooks (Claude Code, Codex, OpenCode) that show the offline ctx view at session start
-flags:
-  --project: Install into the current repository instead of your user config
-  --status: Report whether hooks are installed, without writing
-examples[3]:
+description: Install or repair user-scope SessionStart hooks (Claude Code, Codex, OpenCode) that show the offline ctx view at session start
+examples[1]:
   argo-workflows-axi setup hooks
-  argo-workflows-axi setup hooks --project
-  argo-workflows-axi setup hooks --status
 `;
 
 const MARKER = "argo-workflows-axi";
@@ -42,30 +37,14 @@ export async function setupCommand(
 ): Promise<Record<string, unknown> | string> {
   if (args.includes("--help") || args.length === 0) return SETUP_HELP;
   const usage = "argo-workflows-axi setup hooks";
-  const parsed = parseArgs(args, { bool: ["--project", "--status"] }, usage);
+  const parsed = parseArgs(args, {}, usage);
   const [sub] = requirePositionals(parsed, 1, 1, usage);
   if (sub !== "hooks") {
     throw axiError(`Unknown setup command: ${sub}`, "VALIDATION_ERROR", [
       `Run \`${usage}\``,
     ]);
   }
-  const scope = hasFlag(parsed, "--project") ? "project" : "user";
-
-  if (hasFlag(parsed, "--status")) {
-    const status = sessionStartHookStatus({ marker: MARKER, scope });
-    return {
-      scope,
-      claude: status.claude.installed
-        ? `installed (${status.claude.path})`
-        : "not installed",
-      codex: status.codex.installed
-        ? `installed (${status.codex.path})`
-        : "not installed",
-      opencode: status.opencode.installed
-        ? `installed (${status.opencode.path})`
-        : "not installed",
-    };
-  }
+  const scope = "user";
 
   const errors: string[] = [];
   const execPath = ctxEntrypoint();

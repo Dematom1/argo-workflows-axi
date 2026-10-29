@@ -136,7 +136,7 @@ subcommands[2]:
 description: Archived workflows (Argo Server mode only)
 subcommands[2]:
   list: Archived workflows, failing first
-  get <name|uid>: One archived workflow
+  get <name>: One archived workflow
 `,
     subcommands: { list: archiveList, get: archiveGet },
   },

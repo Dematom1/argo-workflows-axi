@@ -250,6 +250,37 @@ describe("archive", () => {
   });
 });
 
+describe("archive get", () => {
+  it("looks an archived workflow up by name only", () => {
+    const server = [
+      "--argo-server",
+      "argo.example.internal:2746",
+      "-n",
+      "argo",
+    ];
+    const result = run(["archive", "get", "nightly-etl-x7k2p", ...server], {
+      responses: [
+        {
+          match: ["archive", "get", "nightly-etl-x7k2p", "--name"],
+          stdout: json(d.failedEtl()),
+        },
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("nightly-etl-x7k2p");
+    const byUid = run([
+      "archive",
+      "get",
+      "11111111-2222-4333-8444-555555555555",
+      "--uid",
+      ...server,
+    ]);
+    expect(byUid.exitCode).toBe(2);
+    expect(byUid.stdout).toContain("Unknown flag --uid");
+    expect(byUid.calls).toEqual([]);
+  });
+});
+
 describe("setup hooks", () => {
   it("installs a SessionStart hook that runs the offline ctx binary, idempotently", async () => {
     const { readFileSync } = await import("node:fs");
@@ -271,9 +302,11 @@ describe("setup hooks", () => {
     expect(first.calls).toEqual([]);
   });
 
-  it("reports status without writing", () => {
-    const result = run(["setup", "hooks", "--status"]);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("claude: not installed");
+  it("installs user-scope hooks only: --project and --status are not flags", () => {
+    for (const flag of ["--project", "--status"]) {
+      const result = run(["setup", "hooks", flag]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain(`Unknown flag ${flag}`);
+    }
   });
 });

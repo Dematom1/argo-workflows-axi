@@ -22,7 +22,7 @@ import {
 import { axiError, errorCode, errorMessage } from "../errors.js";
 import { shellQuote } from "../format.js";
 import { APPLY_FLAG, checkWrite, type GateDecision } from "../gate.js";
-import { redactValue } from "../redact.js";
+import { redactText, redactValue } from "../redact.js";
 import type { WriteOperationId } from "../registry.js";
 import { parseJsonStream, runWrite } from "../seam.js";
 import {
@@ -600,7 +600,7 @@ export const WF_SUBMIT_HELP = usageHelp(
   "wf submit <file|-> | --from <kind>/<name>",
   "Submit a workflow from a manifest file (or `-` for stdin) or from an existing template or cron workflow",
   [
-    "  --from <kind>/<name>: workflowtemplate/<n>, clusterworkflowtemplate/<n> or cronwf/<n> (template/, clustertemplate/, cron/ also accepted)",
+    "  --from <kind>/<name>: workflowtemplate/<n>, clusterworkflowtemplate/<n> or cronwf/<n> (argo's other spellings, e.g. wftmpl/, cwftmpl/, cronworkflow/, also accepted)",
     "  -p, --parameter <k=v>: Input parameter (repeatable)",
     "  --name <name>: Workflow name; makes retries safe (an existing name is a no-op)",
     "  --generate-name <prefix>: Name prefix",
@@ -634,15 +634,18 @@ const FROM_KINDS: Record<
   string,
   "workflowtemplate" | "clusterworkflowtemplate" | "cronwf"
 > = {
+  WorkflowTemplate: "workflowtemplate",
   workflowtemplate: "workflowtemplate",
-  template: "workflowtemplate",
+  workflowtemplates: "workflowtemplate",
   wftmpl: "workflowtemplate",
+  ClusterWorkflowTemplate: "clusterworkflowtemplate",
   clusterworkflowtemplate: "clusterworkflowtemplate",
-  clustertemplate: "clusterworkflowtemplate",
+  clusterworkflowtemplates: "clusterworkflowtemplate",
   cwftmpl: "clusterworkflowtemplate",
-  cronwf: "cronwf",
+  CronWorkflow: "cronwf",
   cronworkflow: "cronwf",
-  cron: "cronwf",
+  cronworkflows: "cronwf",
+  cronwf: "cronwf",
 };
 
 function parseFrom(
@@ -650,7 +653,8 @@ function parseFrom(
   usage: string,
 ): { kind: string; name: string } {
   const slash = value.indexOf("/");
-  const kind = FROM_KINDS[value.slice(0, slash).toLowerCase()];
+  const given = value.slice(0, slash);
+  const kind = Object.hasOwn(FROM_KINDS, given) ? FROM_KINDS[given] : undefined;
   const name = value.slice(slash + 1);
   if (slash <= 0 || !kind) {
     throw axiError(
@@ -734,6 +738,7 @@ async function submitSourceFromResource(
 
 async function submitSourceFromFile(
   path: string,
+  namespace: string,
   forward: ReturnType<typeof forwardTarget>,
 ): Promise<SubmitSource> {
   const docs = parseAllDocuments(readFileSync(path, "utf-8"));
@@ -749,7 +754,7 @@ async function submitSourceFromFile(
   }
   const wf = manifests[0] as unknown as Workflow & {
     kind?: string;
-    metadata?: { generateName?: string };
+    metadata?: { generateName?: string; namespace?: string };
   };
   if (wf.kind !== "Workflow") {
     throw axiError(
@@ -760,14 +765,23 @@ async function submitSourceFromFile(
       ],
     );
   }
+  const manifestNamespace = wf.metadata?.namespace;
+  if (manifestNamespace && manifestNamespace !== namespace) {
+    throw axiError(
+      `The manifest sets metadata.namespace ${manifestNamespace}, but the target namespace is ${namespace}`,
+      "VALIDATION_ERROR",
+      [
+        `Pass \`-n ${manifestNamespace}\`, or remove metadata.namespace from the manifest`,
+      ],
+    );
+  }
   const lint = await lintFiles("wf.lint", [path], forward);
   return {
     description: "manifest",
     entrypoint: wf.spec?.entrypoint,
     declared: wf.spec?.arguments?.parameters ?? [],
     name: wf.metadata?.name,
-    generateName: (wf.metadata as { generateName?: string } | undefined)
-      ?.generateName,
+    generateName: wf.metadata?.generateName,
     lint: lint.ok
       ? []
       : lint.problems.length > 0
@@ -826,7 +840,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
   return withSpecFiles(files, async (paths) => {
     const source = from
       ? await submitSourceFromResource(from.kind, from.name, forward)
-      : await submitSourceFromFile(paths[0], forward);
+      : await submitSourceFromFile(paths[0], target.namespace, forward);
     const merged = mergeParameters(
       source.declared,
       flagValues(parsed, "--parameter"),
@@ -919,7 +933,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
     }
     if (blockers.length > 0) {
       throw axiError(
-        `Submit blocked: ${blockers.join("; ")}`,
+        `Submit blocked: ${redactText(blockers.join("; ")).text}`,
         "INVALID_REQUEST",
         ["Fix the parameters or manifest, then preview again without --apply"],
       );

@@ -14,7 +14,7 @@ import {
   parsePositiveInt,
   requirePositionals,
 } from "../args.js";
-import { axiError } from "../errors.js";
+import { axiError, mapArgoFailure } from "../errors.js";
 import {
   age,
   duration,
@@ -147,10 +147,7 @@ function listRow(
   row.phase = phaseOf(wf);
   row.age = age(wf.metadata.creationTimestamp);
   if (withMessage)
-    row.message = truncateHead(
-      redactText(wf.status?.message ?? "").text,
-      120,
-    ).text;
+    row.message = truncateHead(wf.status?.message ?? "", 120).text;
   for (const field of fields) {
     switch (field) {
       case "started":
@@ -230,11 +227,16 @@ export async function wfList(args: string[]): Promise<Output> {
 
   const shown = workflows.slice(0, limit);
   const withMessage = shown.some((wf) => (wf.status?.message ?? "") !== "");
+  const redacted = redactValue(
+    shown.map((wf) => listRow(wf, fields, all, withMessage)),
+  );
   const out: Record<string, unknown> = {
     count: `${shown.length} of ${workflows.length} total ${scope}`,
     phases: phaseTally(workflows),
-    workflows: shown.map((wf) => listRow(wf, fields, all, withMessage)),
+    workflows: redacted.value,
   };
+  if (redacted.count > 0)
+    out.redacted = `${redacted.count} sensitive values hidden`;
   const help = [
     `Run \`argo-workflows-axi wf get <name>${suffix}\` for phase, parameters and failed steps`,
   ];
@@ -655,7 +657,7 @@ export async function wfWait(args: string[]): Promise<Output> {
   const usage = "argo-workflows-axi wf wait <name>";
   const parsed = parseArgs(args, WAIT_SPEC, usage);
   const [name] = requirePositionals(parsed, 1, 1, usage);
-  if (name !== "@latest") assertName(name, "workflow", usage);
+  assertName(name, "workflow", usage);
   const timeout = parseTimeout(flagValue(parsed, "--timeout"));
 
   const { wf, done } = await waitForCompletion(
@@ -713,6 +715,14 @@ export function withSpecFiles<T>(
   );
 }
 
+const CONNECTION_FAILURES = new Set([
+  "AUTH_REQUIRED",
+  "FORBIDDEN",
+  "SERVER_UNREACHABLE",
+  "CONTEXT_NOT_FOUND",
+  "RATE_LIMITED",
+]);
+
 export interface LintResult {
   ok: boolean;
   problems: string[];
@@ -727,6 +737,10 @@ export async function lintFiles(
     target,
     allowFailure: true,
   });
+  if (result.exitCode !== 0) {
+    const failure = mapArgoFailure(result.stderr);
+    if (CONNECTION_FAILURES.has(failure.code)) throw failure;
+  }
   const text = stripAnsi(`${result.stdout}\n${result.stderr}`);
   const problems = text
     .split(/\r?\n/)
@@ -734,8 +748,7 @@ export async function lintFiles(
     .filter(
       (l) =>
         l && !/no linting errors found|^time=|level=(info|debug|warn)/i.test(l),
-    )
-    .map((l) => redactText(l).text);
+    );
   return {
     ok: result.exitCode === 0,
     problems: result.exitCode === 0 ? [] : problems,
@@ -762,11 +775,15 @@ export async function lintCommand(
       target: describeTarget(resolved),
     };
   }
-  return {
+  const problems = redactValue(result.problems);
+  const out: Record<string, unknown> = {
     lint: `${pluralize(result.problems.length, "problem")} found`,
-    problems: result.problems,
+    problems: problems.value,
     target: describeTarget(resolved),
   };
+  if (problems.count > 0)
+    out.redacted = `${problems.count} sensitive values hidden`;
+  return out;
 }
 
 export function wfLint(args: string[]): Promise<Output> {

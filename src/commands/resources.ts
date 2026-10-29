@@ -345,14 +345,12 @@ examples[2]:
   argo-workflows-axi archive list -l workflows.argoproj.io/phase=Failed
 `;
 
-export const ARCHIVE_GET_HELP = `command: argo-workflows-axi archive get <name|uid>
+export const ARCHIVE_GET_HELP = `command: argo-workflows-axi archive get <name>
 description: One archived workflow (Argo Server mode only)
 flags:
-  --uid: Treat the argument as a UID
 ${TARGET_LINE}
-examples[2]:
+examples[1]:
   argo-workflows-axi archive get nightly-etl-x7k2p
-  argo-workflows-axi archive get 1f2e3d4c-0000-4000-8000-000000000000 --uid
 `;
 
 async function requireServerMode(parsed: ReturnType<typeof parseArgs>) {
@@ -413,7 +411,7 @@ export async function archiveList(args: string[]): Promise<Output> {
     })),
   };
   const help = [
-    `Run \`argo-workflows-axi archive get <uid> --uid${suffix}\` for one archived workflow`,
+    `Run \`argo-workflows-axi archive get <name>${suffix}\` for one archived workflow`,
   ];
   if (list.length > shown.length)
     help.push(
@@ -425,24 +423,14 @@ export async function archiveList(args: string[]): Promise<Output> {
 
 export async function archiveGet(args: string[]): Promise<Output> {
   if (args.includes("--help")) return ARCHIVE_GET_HELP;
-  const usage = "argo-workflows-axi archive get <name|uid>";
-  const parsed = parseArgs(
-    args,
-    mergeSpecs(TARGET_FLAGS, { bool: ["--uid"] }),
-    usage,
-  );
-  const [id] = requirePositionals(parsed, 1, 1, usage);
-  const byUid = hasFlag(parsed, "--uid");
-  if (byUid) {
-    if (!/^[0-9a-f-]{36}$/i.test(id))
-      throw axiError(`Invalid UID: ${JSON.stringify(id)}`, "VALIDATION_ERROR");
-  } else {
-    assertName(id, "workflow", usage);
-  }
+  const usage = "argo-workflows-axi archive get <name>";
+  const parsed = parseArgs(args, TARGET_FLAGS, usage);
+  const [name] = requirePositionals(parsed, 1, 1, usage);
+  assertName(name, "workflow", usage);
   await requireServerMode(parsed);
   const { stdout } = await runRead(
     "archive.get",
-    [id, byUid ? "--uid" : "--name", "--output=json"],
+    [name, "--name", "--output=json"],
     {
       target: forwardTarget(parsed),
     },

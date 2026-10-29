@@ -33,6 +33,20 @@ describe("wf list", () => {
     expect(result.stdout).toContain("workflows[5]{name,phase,age,message}:");
   });
 
+  it("counts secrets masked in the message column", () => {
+    const leaky = d.failedEtl() as { status: Record<string, unknown> };
+    leaky.status.message = "connect failed password=hunter2";
+    const result = run(["wf", "list"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["list", "--output=json"], stdout: json([leaky]) },
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("hunter2");
+    expect(result.stdout).toContain("redacted: 1 sensitive values hidden");
+  });
+
   it("forwards filters with argo's own flag names and validates them first", () => {
     const result = run(
       [
@@ -311,6 +325,12 @@ describe("wf wait", () => {
     expect(result.stdout).toContain('wait: "finished: Succeeded"');
   });
 
+  it("takes a workflow name only, not @latest", () => {
+    const result = run(["wf", "wait", "@latest"]);
+    expect(result.exitCode).toBe(2);
+    expect(result.calls).toEqual([]);
+  });
+
   it("refuses timeouts above 10m", () => {
     const result = run(["wf", "wait", "x", "--timeout", "11m"]);
     expect(result.exitCode).toBe(2);
@@ -335,6 +355,50 @@ describe("lint", () => {
     expect(result.stdout).toContain("lint: 1 problem found");
     expect(result.stdout).toContain("spec.entrypoint is required");
     expect(writeCalls(result)).toEqual([]);
+  });
+
+  it("counts secrets masked in lint problems", () => {
+    const result = run(["wf", "lint", "bad.yaml"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        {
+          match: ["lint", "bad.yaml"],
+          stdout: "bad.yaml: invalid value token=abc123\n",
+          exit: 1,
+        },
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toContain("abc123");
+    expect(result.stdout).toContain("redacted: 1 sensitive values hidden");
+  });
+
+  it("reports auth and connection failures as errors, not lint problems", () => {
+    for (const [stderr, code] of [
+      [
+        "error: You must be logged in to the server (Unauthorized)\n",
+        "AUTH_REQUIRED",
+      ],
+      [
+        "dial tcp 127.0.0.1:6443: connect: connection refused\n",
+        "SERVER_UNREACHABLE",
+      ],
+    ]) {
+      for (const cmd of [
+        ["wf", "lint"],
+        ["template", "lint"],
+      ]) {
+        const result = run([...cmd, "x.yaml"], {
+          responses: [
+            ...KUBE_DEFAULTS,
+            { match: ["lint", "x.yaml"], stderr, exit: 1 },
+          ],
+        });
+        expect(result.exitCode).toBe(1);
+        expect(result.stdout).toContain(`code: ${code}`);
+        expect(result.stdout).not.toContain("problem found");
+      }
+    }
   });
 
   it("lints stdin through a private temp file", () => {

@@ -2,7 +2,7 @@ import { parseArgs } from "../args.js";
 import { listCronWorkflows } from "../cron-data.js";
 import { errorMessage } from "../errors.js";
 import { age, truncateHead } from "../format.js";
-import { redactText } from "../redact.js";
+import { redactValue } from "../redact.js";
 import { describeTarget, forwardTarget, resolveTarget } from "../target.js";
 import {
   FAILED_PHASES,
@@ -71,8 +71,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
           name: wf.metadata.name,
           phase: phaseOf(wf),
           finished: age(wf.status?.finishedAt),
-          message: truncateHead(redactText(wf.status?.message ?? "").text, 120)
-            .text,
+          message: truncateHead(wf.status?.message ?? "", 120).text,
         }));
         help.push(
           "Run `argo-workflows-axi triage` for failing steps, hints and log tails",
@@ -120,6 +119,9 @@ export async function homeView(): Promise<Record<string, unknown>> {
     help.push("Run `argo-workflows-axi wf list` to list workflows");
   }
   help.push("Run `argo-workflows-axi --help` for all commands");
-  out.help = help;
-  return out;
+  const redacted = redactValue(out);
+  if (redacted.count > 0)
+    redacted.value.redacted = `${redacted.count} sensitive values hidden`;
+  redacted.value.help = help;
+  return redacted.value;
 }

@@ -1,18 +1,15 @@
 import {
   ALL_NAMESPACES_FLAG,
   TARGET_FLAGS,
-  flagValue,
   hasFlag,
   mergeSpecs,
   parseArgs,
-  parseDuration,
-  parsePositiveInt,
   requirePositionals,
 } from "../args.js";
 import { cronSchedule, listCronWorkflows } from "../cron-data.js";
 import { errorMessage } from "../errors.js";
 import { age, ageSeconds, truncateHead } from "../format.js";
-import { redactText } from "../redact.js";
+import { redactValue } from "../redact.js";
 import {
   describeTarget,
   forwardTarget,
@@ -44,18 +41,16 @@ import { fetchPodLog, shapeLog } from "./wf-read.js";
 export const TRIAGE_HELP = `command: argo-workflows-axi triage
 description: What is broken - failed and errored workflows with the failing step, hint and log tail; stuck Pending; suspended crons
 flags:
-  --since <dur>: Look back this far for failures (default 24h)
-  --limit <n>: Failed workflows to detail with logs (default 5, max 20)
   -n, --namespace <ns> | -A, --all-namespaces | --context <name> | -s, --argo-server <host:port>
-examples[3]:
+examples[2]:
   argo-workflows-axi triage
   argo-workflows-axi triage -A
-  argo-workflows-axi triage --since 7d --limit 10
 `;
 
-const SPEC = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG, {
-  value: ["--since", "--limit"],
-});
+const SPEC = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG);
+const WINDOW = "24h";
+const WINDOW_SECONDS = 24 * 60 * 60;
+const DETAILED = 5;
 const STUCK_PENDING_SECONDS = 300;
 const LOG_TAIL_LINES = 10;
 const LOG_TAIL_CHARS = 1500;
@@ -101,13 +96,6 @@ export async function triageCommand(
   const usage = "argo-workflows-axi triage";
   const parsed = parseArgs(args, SPEC, usage);
   requirePositionals(parsed, 0, 0, usage);
-  const sinceRaw = flagValue(parsed, "--since") ?? "24h";
-  const since = parseDuration(sinceRaw, "--since");
-  const limit = parsePositiveInt(
-    flagValue(parsed, "--limit") ?? "5",
-    "--limit",
-    20,
-  );
   const all = hasFlag(parsed, "--all-namespaces");
 
   const target = await resolveTarget(parsed);
@@ -120,7 +108,10 @@ export async function triageCommand(
     forward,
   );
   const failed = workflows
-    .filter((wf) => FAILED_PHASES.has(phaseOf(wf)) && finishedWithin(wf, since))
+    .filter(
+      (wf) =>
+        FAILED_PHASES.has(phaseOf(wf)) && finishedWithin(wf, WINDOW_SECONDS),
+    )
     .sort((a, b) =>
       (b.status?.finishedAt ?? "").localeCompare(a.status?.finishedAt ?? ""),
     );
@@ -150,7 +141,7 @@ export async function triageCommand(
 
   const out: Record<string, unknown> = {
     target: describeTarget(target),
-    window: `failures in the last ${sinceRaw}`,
+    window: `failures in the last ${WINDOW}`,
     summary: `${failed.length} failed, ${stuck.length} stuck, ${typeof crons === "string" ? "? " : suspendedCount} suspended crons`,
   };
 
@@ -164,9 +155,10 @@ export async function triageCommand(
     return out;
   }
 
+  let logRedactions = 0;
   if (failed.length > 0) {
     const detailed: Array<Record<string, unknown>> = [];
-    for (const listed of failed.slice(0, limit)) {
+    for (const listed of failed.slice(0, DETAILED)) {
       let wf = listed;
       if (nodesOf(wf).length === 0) {
         try {
@@ -185,19 +177,13 @@ export async function triageCommand(
       entry.workflow = wf.metadata.name;
       entry.phase = phaseOf(wf);
       entry.finished = `${age(wf.status?.finishedAt)} ago`;
-      entry.message = truncateHead(
-        redactText(wf.status?.message ?? "").text,
-        200,
-      ).text;
+      entry.message = truncateHead(wf.status?.message ?? "", 200).text;
       if (step) {
         entry.step = `${nodeLabel(step)} (${nodeTemplate(step) || step.type})`;
         const code = exitCodeOf(step);
         if (code) entry.exit_code = code;
         if (step.message && step.message !== wf.status?.message) {
-          entry.step_message = truncateHead(
-            redactText(step.message).text,
-            200,
-          ).text;
+          entry.step_message = truncateHead(step.message, 200).text;
         }
         const hint = failureHint(step);
         if (hint) entry.hint = hint;
@@ -214,6 +200,7 @@ export async function triageCommand(
               },
             );
             const log = shapeLog(raw, pod, LOG_TAIL_CHARS);
+            logRedactions += log.redactions;
             entry.log_tail =
               log.lines.length > 0
                 ? log.lines.map((line) => ({ line }))
@@ -226,8 +213,8 @@ export async function triageCommand(
       detailed.push(entry);
     }
     out.failed = detailed;
-    if (failed.length > limit) {
-      out.failed_more = `${failed.length - limit} more failed workflows not detailed`;
+    if (failed.length > DETAILED) {
+      out.failed_more = `${failed.length - DETAILED} more failed workflows not detailed`;
     }
   }
 
@@ -237,7 +224,7 @@ export async function triageCommand(
       name: wf.metadata.name,
       phase: phaseOf(wf),
       age: age(wf.metadata.creationTimestamp),
-      reason: truncateHead(redactText(reason).text, 200).text,
+      reason: truncateHead(reason, 200).text,
     }));
   }
 
@@ -254,9 +241,9 @@ export async function triageCommand(
       `Run \`argo-workflows-axi wf retry <workflow>${suffix}\` to preview a retry`,
     );
   }
-  if (failed.length > limit) {
+  if (failed.length > DETAILED) {
     help.push(
-      `Run \`argo-workflows-axi wf list --status Failed,Error --since ${sinceRaw}${suffix}\` for all ${failed.length}`,
+      `Run \`argo-workflows-axi wf list --status Failed,Error --since ${WINDOW}${suffix}\` for all ${failed.length}`,
     );
   }
   if (suspendedCount > 0) {
@@ -264,6 +251,9 @@ export async function triageCommand(
       `Run \`argo-workflows-axi cron resume <name>${suffix}\` to preview resuming a cron`,
     );
   }
-  if (help.length > 0) out.help = help;
-  return out;
+  const redacted = redactValue(out);
+  const hidden = redacted.count + logRedactions;
+  if (hidden > 0) redacted.value.redacted = `${hidden} sensitive values hidden`;
+  if (help.length > 0) redacted.value.help = help;
+  return redacted.value;
 }

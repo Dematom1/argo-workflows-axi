@@ -1,40 +1,168 @@
-import { readdirSync, readFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
-import { mintApproval } from "../src/approval.js";
+import { isApprovalFor, mintApproval } from "../src/approval.js";
 import { extractDetail, mapArgoFailure } from "../src/errors.js";
+import { checkWrite } from "../src/gate.js";
 import { redactText, redactValue } from "../src/redact.js";
 import { OPERATIONS, REFUSALS } from "../src/registry.js";
 import { parseJsonStream, runRead, runWrite } from "../src/seam.js";
+import type { Target } from "../src/target.js";
 import { podNameOf, type Workflow } from "../src/workflow.js";
+import * as d from "./fixtures/data.js";
+import { KUBE_DEFAULTS, json, run } from "./helpers.js";
 
-const SRC = join(import.meta.dirname, "..", "src");
+const ROOT = join(import.meta.dirname, "..");
 
-function sourceFiles(dir = SRC): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isDirectory()
-      ? sourceFiles(join(dir, entry.name))
-      : [join(dir, entry.name)],
-  );
+function registeredOperation(bin: string, argv: string[]): string | undefined {
+  return Object.entries(OPERATIONS).find(
+    ([, op]) =>
+      op.bin === bin &&
+      op.command.every((token, i) => argv[i] === token) &&
+      argv
+        .slice(op.command.length)
+        .filter((arg) => arg.startsWith("-"))
+        .every((arg) => {
+          const name = arg.includes("=") ? arg.slice(0, arg.indexOf("=")) : arg;
+          return (
+            (op.flags as readonly string[]).includes(name) ||
+            (op.targeted &&
+              ["--context", "--argo-server", "--namespace"].includes(name)) ||
+            (op.bin === "argo" && name === "--loglevel")
+          );
+        }),
+  )?.[0];
 }
 
 describe("read-only by construction (S5)", () => {
-  it("only src/seam.ts spawns processes", () => {
-    const spawners = sourceFiles().filter((f) =>
-      /node:child_process/.test(readFileSync(f, "utf-8")),
+  it("every process the CLI starts is a registered operation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "awf-axi-sweep-"));
+    const manifest = join(dir, "wf.yaml");
+    writeFileSync(
+      manifest,
+      "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\nspec:\n  entrypoint: say\n",
     );
-    expect(spawners.map((f) => f.slice(SRC.length + 1))).toEqual(["seam.ts"]);
+    const responses = [
+      ...KUBE_DEFAULTS,
+      { match: ["version"], stdout: "argo: v3.7.0\n" },
+      { match: ["cron", "list"], stdout: "" },
+      { match: ["template", "list"], stdout: "[]" },
+      { match: ["cluster-template", "list"], stdout: "[]" },
+      { match: ["template", "get"], stdout: json(d.template()) },
+      { match: ["cron", "get"], stdout: json(d.cron("nightly-etl", true)) },
+      { match: ["lint"], stdout: "no linting errors found!\n" },
+      { match: ["logs"], stdout: "line\n" },
+      { match: ["get", "@latest"], stdout: json(d.failedEtl()) },
+      { match: ["get", "nightly-etl-x7k2p"], stdout: json(d.failedEtl()) },
+      { match: ["get", "ingest-q9w8e"], stdout: json(d.runningIngest()) },
+      {
+        match: ["list", "--output=json"],
+        stdout: json([d.failedEtl(), d.runningIngest(), d.stuckPending()]),
+      },
+    ];
+    const commands = [
+      [],
+      ["triage"],
+      ["triage", "-A"],
+      ["ctx"],
+      ["wf", "list"],
+      ["wf", "get", "@latest"],
+      ["wf", "logs", "nightly-etl-x7k2p"],
+      ["wf", "wait", "nightly-etl-x7k2p"],
+      ["wf", "lint", manifest],
+      ["wf", "submit", manifest],
+      ["wf", "submit", "--from", "workflowtemplate/nightly-etl"],
+      ["wf", "retry", "nightly-etl-x7k2p"],
+      ["wf", "resubmit", "nightly-etl-x7k2p"],
+      ["wf", "stop", "ingest-q9w8e"],
+      ["wf", "terminate", "ingest-q9w8e"],
+      ["wf", "suspend", "ingest-q9w8e"],
+      ["wf", "resume", "ingest-q9w8e"],
+      ["cron", "list"],
+      ["cron", "get", "nightly-etl"],
+      ["cron", "suspend", "nightly-etl"],
+      ["cron", "resume", "nightly-etl"],
+      ["template", "list"],
+      ["template", "get", "nightly-etl"],
+      ["template", "lint", manifest],
+      ["clustertemplate", "list"],
+      ["archive", "list", "--argo-server", "argo:2746", "-n", "argo"],
+      ["archive", "get", "x", "--argo-server", "argo:2746", "-n", "argo"],
+    ];
+    let spawned = 0;
+    for (const args of commands) {
+      const result = run(args, { responses });
+      for (const call of result.calls) {
+        spawned += 1;
+        expect(
+          registeredOperation(call.bin, call.argv),
+          `${args.join(" ")} started ${call.bin} ${call.argv.join(" ")}`,
+        ).toBeDefined();
+      }
+    }
+    expect(spawned).toBeGreaterThan(commands.length);
   });
 
-  it("only the write gate mints approvals", () => {
-    const minters = sourceFiles().filter((f) =>
-      /mintApproval\(/.test(readFileSync(f, "utf-8")),
+  it("the seam only honours approvals the write gate minted for that operation", () => {
+    const dir = mkdtempSync(join(tmpdir(), "awf-axi-gate-"));
+    mkdirSync(join(dir, "argo-workflows-axi"));
+    writeFileSync(
+      join(dir, "argo-workflows-axi", "config.json"),
+      JSON.stringify({
+        writableTargets: [{ context: "kind-dev", namespace: "argo" }],
+      }),
     );
-    expect(minters.map((f) => f.slice(SRC.length + 1)).sort()).toEqual([
-      "approval.ts",
-      "gate.ts",
-    ]);
+    const previous = process.env.XDG_CONFIG_HOME;
+    process.env.XDG_CONFIG_HOME = dir;
+    try {
+      const target: Target = {
+        mode: "kubernetes",
+        context: "kind-dev",
+        namespace: "argo",
+        namespaceSource: "flag",
+        allNamespaces: false,
+        explicit: { context: true, server: false, namespace: true },
+      };
+      const spec = { bool: ["--apply"] };
+      const preview = checkWrite(
+        "wf.stop",
+        parseArgs(["x"], spec, "t"),
+        target,
+        "wf stop x",
+      );
+      expect(preview.approval).toBeUndefined();
+      const applied = checkWrite(
+        "wf.stop",
+        parseArgs(["x", "--apply"], spec, "t"),
+        target,
+        "wf stop x",
+      );
+      expect(isApprovalFor(applied.approval, "wf.stop")).toBe(true);
+      expect(isApprovalFor(applied.approval, "wf.suspend")).toBe(false);
+      const forged = Object.freeze({ ...applied.approval });
+      expect(isApprovalFor(forged, "wf.stop")).toBe(false);
+      expect(isApprovalFor({ op: "wf.stop" }, "wf.stop")).toBe(false);
+      expect(() =>
+        checkWrite(
+          "wf.stop",
+          parseArgs(["x", "--apply"], spec, "t"),
+          { ...target, namespace: "prod" },
+          "wf stop x",
+        ),
+      ).toThrow(/not allowed/);
+    } finally {
+      if (previous === undefined) delete process.env.XDG_CONFIG_HOME;
+      else process.env.XDG_CONFIG_HOME = previous;
+    }
   });
 
   it("refuses write operations without an approval, or with one for another operation", () => {
@@ -229,22 +357,34 @@ describe("helpers", () => {
 });
 
 describe("--version fast path", () => {
-  it("the bin answers --version before importing the command graph", () => {
-    const bin = readFileSync(
-      join(SRC, "..", "bin", "argo-workflows-axi.ts"),
-      "utf-8",
+  it("the bin answers --version without loading the command graph", () => {
+    const dir = mkdtempSync(join(tmpdir(), "awf-axi-fast-"));
+    mkdirSync(join(dir, "dist", "bin"), { recursive: true });
+    mkdirSync(join(dir, "dist", "src"));
+    copyFileSync(
+      join(ROOT, "dist", "bin", "argo-workflows-axi.js"),
+      join(dir, "dist", "bin", "argo-workflows-axi.js"),
     );
-    const staticImports = [...bin.matchAll(/^import .* from "(.*)";$/gm)].map(
-      (m) => m[1],
+    copyFileSync(
+      join(ROOT, "dist", "src", "version.js"),
+      join(dir, "dist", "src", "version.js"),
     );
-    expect(staticImports).toEqual([
-      "axi-sdk-js/fast-path",
-      "../src/version.js",
-    ]);
-    const version = readFileSync(join(SRC, "version.ts"), "utf-8");
-    const versionImports = [...version.matchAll(/from "(.*)";/g)].map(
-      (m) => m[1],
+    copyFileSync(join(ROOT, "package.json"), join(dir, "package.json"));
+    symlinkSync(join(ROOT, "node_modules"), join(dir, "node_modules"));
+    writeFileSync(
+      join(dir, "dist", "src", "cli.js"),
+      'throw new Error("command graph loaded");\n',
     );
-    expect(versionImports.every((m) => m.startsWith("node:"))).toBe(true);
+    const bin = join(dir, "dist", "bin", "argo-workflows-axi.js");
+    const version = spawnSync(process.execPath, [bin, "--version"], {
+      encoding: "utf-8",
+    });
+    expect(version.status).toBe(0);
+    expect(version.stdout.trim()).toMatch(/^\d+\.\d+\.\d+/);
+    const other = spawnSync(process.execPath, [bin, "wf", "list"], {
+      encoding: "utf-8",
+    });
+    expect(other.status).not.toBe(0);
+    expect(other.stderr).toContain("command graph loaded");
   });
 });

@@ -60,6 +60,7 @@ describe("triage", () => {
     expect(result.stdout).toContain("log_tail[2]{line}:");
     expect(result.stdout).toContain("token=[redacted]");
     expect(result.stdout).not.toContain("abc.def.ghi");
+    expect(result.stdout).toContain("redacted: 1 sensitive values hidden");
     expect(result.stdout).toContain("stuck[1]{name,phase,age,reason}:");
     expect(result.stdout).toContain(
       "suspended_crons[1]{name,schedule,last_run}:",
@@ -74,7 +75,7 @@ describe("triage", () => {
   it("ignores failures outside the window and says nothing is broken", () => {
     const old = d.failedEtl() as { status: Record<string, unknown> };
     old.status.finishedAt = d.ago(3 * 86400);
-    const result = run(["triage", "--since", "1d"], {
+    const result = run(["triage"], {
       responses: [
         ...KUBE_DEFAULTS,
         { match: ["cron", "list"], stdout: "" },
@@ -108,6 +109,20 @@ describe("triage", () => {
     expect(result.stdout).toContain(
       "suspended_crons[1]{namespace,name,schedule,last_run}:",
     );
+  });
+});
+
+describe("triage window", () => {
+  it("uses a fixed 24h window and 5 detailed workflows: --since and --limit are not flags", () => {
+    for (const flag of [
+      ["--since", "7d"],
+      ["--limit", "10"],
+    ]) {
+      const result = run(["triage", ...flag]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain(`Unknown flag ${flag[0]}`);
+      expect(result.calls).toEqual([]);
+    }
   });
 });
 
