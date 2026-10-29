@@ -24,6 +24,8 @@ export interface FakeResponse {
   exit?: number;
   times?: number;
   sleepMs?: number;
+  /** Overwrite this file with these contents when the response is used. */
+  writeFile?: [string, string];
 }
 
 export interface Call {

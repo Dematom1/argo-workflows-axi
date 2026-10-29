@@ -3,7 +3,8 @@
 //
 // FAKE_SCENARIO points at a JSON file:
 //   { "responses": [ { "bin": "argo", "match": ["get", "wf-a"], "stdout": "...",
-//                      "stderr": "...", "exit": 0, "times": 1, "sleepMs": 0 } ] }
+//                      "stderr": "...", "exit": 0, "times": 1, "sleepMs": 0,
+//                      "writeFile": ["/path", "contents"] } ] }
 // The first response whose `bin` matches and whose `match` tokens all appear in
 // argv (and that has uses left) answers. Unmatched calls exit 1 with a
 // "fake: no response" message. Every call is appended to FAKE_LOG as JSON,
@@ -56,6 +57,8 @@ used[index] = (used[index] ?? 0) + 1;
 if (statePath) writeFileSync(statePath, JSON.stringify(used));
 
 const response = scenario.responses[index];
+if (response.writeFile)
+  writeFileSync(response.writeFile[0], response.writeFile[1]);
 if (response.sleepMs) {
   await new Promise((resolve) => setTimeout(resolve, response.sleepMs));
 }

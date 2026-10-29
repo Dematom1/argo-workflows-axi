@@ -752,7 +752,7 @@ type WorkflowManifest = Workflow & {
 };
 
 interface Manifest {
-  /** File holding the user's manifest bytes unchanged: the original path, or a private copy of stdin. */
+  /** Private temp file holding exactly the manifest bytes that were checked. */
   path: string;
   wf: WorkflowManifest;
 }
@@ -861,9 +861,8 @@ async function withManifest<T>(
 ): Promise<T> {
   const bytes = readFileSync(file === "-" ? 0 : file);
   const wf = readManifest(bytes.toString("utf-8"), namespace);
-  if (file !== "-") return fn({ path: file, wf });
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
-  const path = join(dir, "stdin.yaml");
+  const path = join(dir, "manifest.yaml");
   writeFileSync(path, bytes, { mode: 0o600 });
   try {
     return await fn({ path, wf });

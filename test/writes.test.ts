@@ -1,4 +1,4 @@
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -638,38 +638,51 @@ describe("wf submit", () => {
   const PASSTHROUGH =
     "apiVersion: argoproj.io/v1alpha1\nkind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\nx: &defaults\n  mode: 0755\nspec:\n  entrypoint: say\n  arguments:\n    artifacts:\n      - name: script\n        <<: *defaults\n    parameters:\n      - name: run-date\n        value: 2024-01-01\n      - name: at\n        value: 12:30\n      - name: flag\n        value: yes\n";
 
-  it("lints and submits the original manifest file unchanged", () => {
-    const file = specFile("passthrough.yaml", PASSTHROUGH);
-    const result = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
-      responses: SUBMIT_OK,
-      config: ALLOW,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("result: submitted");
-    for (const verb of ["lint", "submit"]) {
-      const call = result.calls.find(
-        (c) => c.bin === "argo" && c.argv[0] === verb,
-      );
-      expect(call?.argv[1]).toBe(file);
-      expect(call?.files[file]).toBe(PASSTHROUGH);
-    }
-  });
-
-  it("lints and submits stdin's exact bytes from a private temp file", () => {
-    const result = run(["wf", "submit", "-", ...EXPLICIT, "--apply"], {
-      stdin: PASSTHROUGH,
-      responses: SUBMIT_OK,
-      config: ALLOW,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("result: submitted");
-    for (const verb of ["lint", "submit"]) {
+  function argoInputs(result: ReturnType<typeof run>): string[] {
+    return ["lint", "submit"].map((verb) => {
       const call = result.calls.find(
         (c) => c.bin === "argo" && c.argv[0] === verb,
       );
       const path = call?.argv[1] ?? "";
-      expect(path).toMatch(/argo-workflows-axi-.*stdin\.yaml$/);
-      expect(call?.files[path]).toBe(PASSTHROUGH);
+      expect(path).toMatch(/argo-workflows-axi-.*manifest\.yaml$/);
+      return call?.files[path] ?? "";
+    });
+  }
+
+  it("lints and submits a private copy of the checked bytes, never the user's path", () => {
+    const file = specFile("passthrough.yaml", PASSTHROUGH);
+    const changed = PASSTHROUGH.replace("namespace: argo", "namespace: prod");
+    const result = run(["wf", "submit", file, ...EXPLICIT, "--apply"], {
+      responses: [
+        { ...SUBMIT_OK[2], writeFile: [file, changed] },
+        ...SUBMIT_OK,
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain("result: submitted");
+    expect(readFileSync(file, "utf-8")).toBe(changed);
+    expect(argoInputs(result)).toEqual([PASSTHROUGH, PASSTHROUGH]);
+  });
+
+  it("reads stdin and /dev/fd-style paths once, in preview and on --apply", () => {
+    for (const source of ["-", "/dev/stdin"]) {
+      const preview = run(["wf", "submit", source], {
+        stdin: PASSTHROUGH,
+        responses: SUBMIT_OK,
+        config: ALLOW,
+      });
+      expect(preview.exitCode, source).toBe(0);
+      expect(preview.stdout, source).toContain("dry_run: true");
+      expect(preview.stdout, source).toContain("workflow: hello");
+      const applied = run(["wf", "submit", source, ...EXPLICIT, "--apply"], {
+        stdin: PASSTHROUGH,
+        responses: SUBMIT_OK,
+        config: ALLOW,
+      });
+      expect(applied.exitCode, source).toBe(0);
+      expect(applied.stdout, source).toContain("result: submitted");
+      expect(argoInputs(applied)).toEqual([PASSTHROUGH, PASSTHROUGH]);
     }
   });
 });
