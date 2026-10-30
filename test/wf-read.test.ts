@@ -22,7 +22,7 @@ describe("wf list", () => {
     expect(result.stdout).toContain("count: 5 of 5 total in namespace argo");
     const rows = result.stdout
       .split("\n")
-      .filter((l) => l.startsWith("  ") && !l.startsWith("  Run"));
+      .filter((l) => l.startsWith("  ") && !l.startsWith("  - "));
     expect(rows.map((r) => r.trim().split(",")[1])).toEqual([
       "Failed",
       "Error",
