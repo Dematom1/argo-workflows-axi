@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.2...argo-workflows-axi-v0.1.3) (2026-10-30)
+
+
+### Bug Fixes
+
+* reject malformed workflow list responses and inherited subcommands ([#11](https://github.com/Dematom1/argo-workflows-axi/issues/11)) ([1bdd745](https://github.com/Dematom1/argo-workflows-axi/commit/1bdd7455389ff88e7f47c383f9990d8952d27979))
+
 ## [0.1.2](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.1...argo-workflows-axi-v0.1.2) (2026-10-30)
 
 
