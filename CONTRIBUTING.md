@@ -24,6 +24,6 @@ If you change `src/skill.ts` or the CLI description, run `pnpm run build:skill` 
 
 ## Releases
 
-Use conventional commit messages (`feat:`, `fix:`, `docs:`, ...). See [README.md#releases](README.md#releases) for the release and recovery process. Release PRs are opened by `github-actions[bot]`, which the required "PR must be raised via no-mistakes" check exempts by author, so that check reports as skipped, which satisfies the ruleset, and the release PR merges normally without a bypass.
+Use conventional commit messages (`feat:`, `fix:`, `docs:`, ...). See [README.md#releases](README.md#releases) for the release and recovery process. Release PRs are opened by the repository's release GitHub App.
 
 - Do not hand-edit `CHANGELOG.md` or `.release-please-manifest.json`, and do not bump `package.json`'s `version` by hand. release-please owns them. `guard-generated-files.yml` fails a PR that edits the first two.
