@@ -23,10 +23,7 @@ jobs:
     if: ${{ inputs.tag == '' }}
     runs-on: ubuntu-latest
     permissions:
-      # Commit the release PR's changes, then tag and create the GitHub release.
-      contents: write
-      # Open and update the release PR.
-      pull-requests: write
+      contents: read
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
