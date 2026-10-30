@@ -79,17 +79,14 @@ jobs:
 
       - name: Stage npm package
         run: |
-          npm stage publish --access public --provenance
+          npm stage publish --access public --provenance > "$RUNNER_TEMP/stage-publish.log"
           node --input-type=commonjs <<'NODE'
           const fs = require('node:fs');
-          const { execFileSync } = require('node:child_process');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           let stageId = 'unavailable';
           try {
-            const entries = JSON.parse(execFileSync('npm', ['stage', 'list', pkg.name, '--json'], { encoding: 'utf8' }));
-            const staged = (Array.isArray(entries) ? entries : Object.values(entries))
-              .find(entry => entry.version === pkg.version);
-            if (staged) stageId = staged.id || staged.stageId || 'unavailable';
+            const output = fs.readFileSync(`${process.env.RUNNER_TEMP}/stage-publish.log`, 'utf8');
+            stageId = output.match(/\(staged with id ([^)]+)\)/)?.[1] || 'unavailable';
           } catch {}
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
             `Stage ID: ${stageId}`,

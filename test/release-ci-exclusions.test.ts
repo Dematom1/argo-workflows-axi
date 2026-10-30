@@ -1,5 +1,4 @@
 import {
-  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -64,20 +63,16 @@ describe("release-please publishing", () => {
 
     const temp = mkdtempSync(join(tmpdir(), "release-summary-"));
     try {
-      const bin = join(temp, "bin");
       const packageDir = join(temp, "package");
       const summary = join(temp, "summary.md");
-      const npm = join(bin, "npm");
+      const stageOutput = join(temp, "stage-publish.log");
       const pkg = { name: "example-package", version: "1.2.3" };
-      const staged = [{ id: "stage-123", version: pkg.version }];
-      mkdirSync(bin);
       mkdirSync(packageDir);
       writeFileSync(join(packageDir, "package.json"), JSON.stringify(pkg));
       writeFileSync(
-        npm,
-        `#!/bin/sh\nprintf '%s' '${JSON.stringify(staged)}'\n`,
+        stageOutput,
+        "+ example-package@1.2.3 (staged with id stage-123)\n",
       );
-      chmodSync(npm, 0o755);
 
       const result = spawnSync(process.execPath, ["--input-type=commonjs"], {
         cwd: packageDir,
@@ -85,7 +80,7 @@ describe("release-please publishing", () => {
         encoding: "utf8",
         env: {
           ...process.env,
-          PATH: `${bin}:${process.env.PATH}`,
+          RUNNER_TEMP: temp,
           GITHUB_STEP_SUMMARY: summary,
         },
       });
