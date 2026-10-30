@@ -354,7 +354,11 @@ function treeLines(wf: Workflow, full: boolean): string[] {
     const d = duration(node.startedAt, node.finishedAt);
     if (d) bits.push(d);
     if (node.message && ["Failed", "Error"].includes(node.phase ?? "")) {
-      bits.push(full ? `${node.message} (${node.message.length} chars)` : truncateHead(node.message, 80).text);
+      bits.push(
+        full
+          ? `${node.message} (${node.message.length} chars)`
+          : truncateHead(node.message, 80).text,
+      );
     }
     lines.push(bits.join(" | "));
     for (const childId of node.children ?? []) {
@@ -381,8 +385,18 @@ export async function wfGet(args: string[]): Promise<Output> {
 
   if (hasFlag(parsed, "--tree")) {
     out.tree = treeLines(wf, full);
-    if (!full && all.some((node) => node.message && ["Failed", "Error"].includes(node.phase ?? "") && node.message.length > 80))
-      out.help = [`Run \`argo-workflows-axi wf get ${wf.metadata.name} --tree --full${targetSuffix(parsed)}\` for untruncated tree messages`];
+    if (
+      !full &&
+      all.some(
+        (node) =>
+          node.message &&
+          ["Failed", "Error"].includes(node.phase ?? "") &&
+          node.message.length > 80,
+      )
+    )
+      out.help = [
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --tree --full${targetSuffix(parsed)}\` for untruncated tree messages`,
+      ];
   } else if (hasFlag(parsed, "--nodes")) {
     out.nodes = `${all.length} of ${all.length} nodes shown`;
     out.all_nodes = all
@@ -409,7 +423,9 @@ export async function wfGet(args: string[]): Promise<Output> {
 
   const suffix = targetSuffix(parsed);
   const wfName = wf.metadata.name;
-  const help: string[] = Array.isArray(result.help) ? result.help.map(String) : [];
+  const help: string[] = Array.isArray(result.help)
+    ? result.help.map(String)
+    : [];
   if (failedRows.length > 0) {
     help.push(
       `Run \`argo-workflows-axi wf logs ${wfName}${suffix}\` for the failing step's logs`,
@@ -605,7 +621,9 @@ export async function wfLogs(args: string[]): Promise<Output> {
   header.lines = `${log.lines.length} shown (last ${tail} per pod${flagValue(parsed, "--grep") ? ", grep applied" : ""})`;
   if (log.truncated) {
     header.truncated = `kept the last ${log.text.length} of ${log.totalChars} chars`;
-    header.help = [`Run \`argo-workflows-axi wf logs ${wfName}${suffix} --full\` for up to 1,000,000 log characters`];
+    header.help = [
+      `Run \`argo-workflows-axi wf logs ${wfName}${suffix} --full\` for up to 1,000,000 log characters`,
+    ];
   }
   header.log = log.lines;
   if (log.redactions > 0)

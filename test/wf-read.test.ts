@@ -200,14 +200,20 @@ describe("wf get", () => {
 
   it("uses --full for tree messages and hints only when a message is truncated", () => {
     const wf = d.failedEtl();
-    const node = Object.values(wf.status?.nodes ?? {}).find((n) => n.type === "Pod" && n.phase === "Failed");
+    const node = Object.values(wf.status?.nodes ?? {}).find(
+      (n) => n.type === "Pod" && n.phase === "Failed",
+    );
     if (!node) throw new Error("fixture lacks failed pod");
     node.message = "x".repeat(100);
     const responses = [...KUBE_DEFAULTS, { match: ["get"], stdout: json(wf) }];
-    const preview = run(["wf", "get", "nightly-etl-x7k2p", "--tree"], { responses });
+    const preview = run(["wf", "get", "nightly-etl-x7k2p", "--tree"], {
+      responses,
+    });
     expect(preview.stdout).toContain("truncated, 100 chars total");
     expect(preview.stdout).toContain("--tree --full");
-    const full = run(["wf", "get", "nightly-etl-x7k2p", "--tree", "--full"], { responses });
+    const full = run(["wf", "get", "nightly-etl-x7k2p", "--tree", "--full"], {
+      responses,
+    });
     expect(full.stdout).toContain(`${"x".repeat(100)} (100 chars)`);
     expect(full.stdout).not.toContain("--tree --full");
   });
@@ -280,13 +286,16 @@ describe("wf logs", () => {
     expect(result.stdout).not.toContain("line 00000");
     expect(result.stdout).toContain("--full");
     expect(result.stdout).not.toContain("line 00000");
-    const full = run(["wf", "logs", "nightly-etl-x7k2p", "--tail", "2000", "--full"], {
-      responses: [
-        ...KUBE_DEFAULTS,
-        { match: ["get"], stdout: json(d.failedEtl()) },
-        { match: ["logs"], stdout: `${lines.join("\n")}\n` },
-      ],
-    });
+    const full = run(
+      ["wf", "logs", "nightly-etl-x7k2p", "--tail", "2000", "--full"],
+      {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["get"], stdout: json(d.failedEtl()) },
+          { match: ["logs"], stdout: `${lines.join("\n")}\n` },
+        ],
+      },
+    );
     expect(full.stdout).toContain("line 00000");
     expect(full.stdout).not.toContain("truncated:");
   });

@@ -69,7 +69,7 @@ You only need one of these.
 | `triage`                                                                  | One call for what is broken: failed steps with exit-code and OOM hints and log tails, stuck Pending, suspended crons |
 | `wf list`                                                                 | Workflows, failing and running first, with `count: N of M total` and a phase tally                                   |
 | `wf get <name\|@latest>`                                                  | Summary plus only the failed steps; `--nodes`, `--tree`, `--full`                                                    |
-| `wf logs <name\|@latest> [<pod>]`                                         | Bounded logs of the failing step (last 100 lines, 20,000-char cap keeping the tail)                                  |
+| `wf logs <name\|@latest> [<pod>]`                                         | Bounded logs of the failing step (last 100 lines, 20,000-char cap by default; `--full` raises the cap to 1,000,000)  |
 | `wf wait <name>`                                                          | Bounded wait (default 120s, `--timeout` up to 10m); returns the current state on timeout                             |
 | `wf lint <file...\|->`                                                    | Validate manifests                                                                                                   |
 | `cron list\|get`, `template list\|get\|lint`, `clustertemplate list\|get` | Cron workflows and templates (template `get` shows input parameters with defaults)                                   |
@@ -123,7 +123,7 @@ Values whose key looks sensitive (password, secret, token, api key, credential a
 
 ### Waiting, logs and output size
 
-Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod, are capped at 20,000 characters keeping the tail, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more; long messages are truncated with their total size, and only when something was cut does the output point at `--full` (or, for `archive get`, which has no `--full`, the raw `argo archive get <uid> -o json --argo-server <host:port> -n <namespace>` for a human to run; that raw output is not redacted).
+Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod and a 20,000-character cap; `--full` raises the cap to 1,000,000 characters. Log lines are included in the structured output, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more; long messages are truncated with their total size, and only when something was cut does the output point at `--full` (or, for `archive get`, which has no `--full`, the raw `argo archive get <uid> -o json --argo-server <host:port> -n <namespace>` for a human to run; that raw output is not redacted).
 
 ## Modes
 
