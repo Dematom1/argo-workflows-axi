@@ -79,17 +79,17 @@ jobs:
 
       - name: Stage npm package
         run: |
-          npm stage publish --access public --provenance --json > "$RUNNER_TEMP/stage-publish.json"
+          npm stage publish --access public --provenance > "$RUNNER_TEMP/stage-publish.log"
           node --input-type=commonjs <<'NODE'
           const fs = require('node:fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-          let stageId;
+          let stageId = 'unavailable';
           try {
-            const result = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/stage-publish.json`, 'utf8'));
-            stageId = result[pkg.name]?.stageId;
+            const output = fs.readFileSync(`${process.env.RUNNER_TEMP}/stage-publish.log`, 'utf8');
+            stageId = output.match(/\(staged with id ([^)]+)\)/)?.[1] || 'unavailable';
           } catch {}
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
-            `Stage ID: ${stageId || 'unavailable'}`,
+            `Stage ID: ${stageId}`,
             `Package: ${pkg.name}`,
             `Version: ${pkg.version}`,
             'Waiting for approval: run axi-approve',

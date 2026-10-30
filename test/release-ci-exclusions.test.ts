@@ -1,5 +1,13 @@
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
@@ -44,12 +52,45 @@ describe("release-please publishing", () => {
     ).toBeUndefined();
 
     const publishSteps = doc.jobs.publish.steps ?? [];
-    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
-      "npm stage publish --access public --provenance --json",
+    const stageStep = publishSteps.find((step) =>
+      step.run?.includes("npm stage publish"),
     );
-    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
-      "Waiting for approval: run axi-approve",
-    );
+    expect(stageStep).toBeDefined();
+    const script = stageStep?.run?.match(
+      /node --input-type=commonjs <<'NODE'\n([\s\S]*?)\nNODE/,
+    )?.[1];
+    expect(script).toBeDefined();
+
+    const temp = mkdtempSync(join(tmpdir(), "release-summary-"));
+    try {
+      const packageDir = join(temp, "package");
+      const summary = join(temp, "summary.md");
+      const stageOutput = join(temp, "stage-publish.log");
+      const pkg = { name: "example-package", version: "1.2.3" };
+      mkdirSync(packageDir);
+      writeFileSync(join(packageDir, "package.json"), JSON.stringify(pkg));
+      writeFileSync(
+        stageOutput,
+        "+ example-package@1.2.3 (staged with id stage-123)\n",
+      );
+
+      const result = spawnSync(process.execPath, ["--input-type=commonjs"], {
+        cwd: packageDir,
+        input: script,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          RUNNER_TEMP: temp,
+          GITHUB_STEP_SUMMARY: summary,
+        },
+      });
+      expect(result.status).toBe(0);
+      expect(readFileSync(summary, "utf8")).toBe(
+        "Stage ID: stage-123\nPackage: example-package\nVersion: 1.2.3\nWaiting for approval: run axi-approve\n",
+      );
+    } finally {
+      rmSync(temp, { recursive: true, force: true });
+    }
     expect(
       publishSteps.find((step) => step.uses?.startsWith("actions/checkout@"))
         ?.with?.ref,
