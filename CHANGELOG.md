@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.1...argo-workflows-axi-v0.1.2) (2026-10-30)
+
+
+### Bug Fixes
+
+* **release:** stage npm publishes for approval ([#7](https://github.com/Dematom1/argo-workflows-axi/issues/7)) ([55859e7](https://github.com/Dematom1/argo-workflows-axi/commit/55859e76ffc08ecf552a9545e082676b6207aca4))
+
 ## [0.1.1](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.0...argo-workflows-axi-v0.1.1) (2026-10-29)
 
 
