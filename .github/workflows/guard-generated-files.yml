@@ -22,7 +22,7 @@ jobs:
     if: >-
       github.event.pull_request.user.login != 'github-actions[bot]' &&
       github.event.pull_request.user.login != 'release-please[bot]' &&
-      !(github.event.pull_request.user.type == 'Bot' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
+      !(github.event.pull_request.user.type == 'Bot' && startsWith(github.event.pull_request.head.ref, 'release-please--') && github.event.pull_request.head.repo.full_name == github.repository)
     steps:
       # Actions are pinned to full commit SHAs (tags are mutable).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
