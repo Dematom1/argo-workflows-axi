@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { argoCalls, run } from "./helpers.js";
+import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
 
 describe("cli basics", () => {
   it("prints the bare version for -v, -V and --version without calling argo", () => {
@@ -45,6 +45,31 @@ describe("cli basics", () => {
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("Valid subcommands: list, get, logs");
   });
+
+  it.each(["constructor", "toString"])(
+    "rejects inherited property %s as a subcommand",
+    (subcommand) => {
+      const result = run(["wf", subcommand]);
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain("code: VALIDATION_ERROR");
+      expect(result.stdout).toContain(`Unknown subcommand: wf ${subcommand}`);
+    },
+  );
+
+  it.each(["{}", "null", "42", "", "[{}]"])(
+    "rejects malformed workflow-list response %j instead of reporting zero",
+    (stdout) => {
+      const result = run(["wf", "list"], {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["list", "--output=json"], stdout },
+        ],
+      });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("code: UNKNOWN");
+      expect(result.stdout).not.toContain("0 workflows");
+    },
+  );
 
   it("prints per-subcommand help with flags and examples", () => {
     const result = run(["wf", "logs", "--help"]);
