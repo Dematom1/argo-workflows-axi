@@ -92,17 +92,57 @@ describe("wf list", () => {
     expect(fields.calls).toEqual([]);
   });
 
-  it("honours --limit and says how to see the rest", () => {
-    const result = run(["wf", "list", "--limit", "2"], {
+  it("preserves filters and all-namespace scope in expansion hints", () => {
+    const result = run(
+      [
+        "wf",
+        "list",
+        "--limit",
+        "1",
+        "--status",
+        "Failed",
+        "-A",
+        "--prefix",
+        "nightly-",
+      ],
+      {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["list"], stdout: json(WORKFLOWS) },
+        ],
+      },
+    );
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf list --limit 1000 --status Failed --prefix nightly- -A` to show up to 1000 matching workflows",
+    );
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get <name> -n <namespace>" +
+        "` for phase, parameters and failed steps",
+    );
+  });
+
+  it("quotes whitespace in reconstructed filter values", () => {
+    const result = run(
+      ["wf", "list", "--limit", "1", "--prefix", "nightly batch"],
+      {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["list"], stdout: json(WORKFLOWS) },
+        ],
+      },
+    );
+    expect(result.stdout).toContain("--prefix 'nightly batch'");
+  });
+
+  it("does not promise to show more than the 1000-row limit", () => {
+    const result = run(["wf", "list", "--limit", "1"], {
       responses: [
         ...KUBE_DEFAULTS,
-        { match: ["list"], stdout: json(WORKFLOWS) },
+        { match: ["list"], stdout: json(Array(1001).fill(WORKFLOWS[0])) },
       ],
     });
-    expect(result.stdout).toContain("count: 2 of 5 total");
-    expect(result.stdout).toContain(
-      "Run `argo-workflows-axi wf list --limit 5` to see all 5",
-    );
+    expect(result.stdout).toContain("to show up to 1000 matching workflows");
+    expect(result.stdout).not.toContain("to see all 1001");
   });
 
   it("adds a namespace column with -A and extra --fields columns", () => {
