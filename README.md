@@ -150,7 +150,7 @@ Tests run the built CLI end to end against fake `argo` and `kubectl` executables
 
 ## Releases
 
-GitHub releases are published to npm as staged versions. After a release workflow stages a version, the maintainer must approve it with 2FA using `npm stage approve <id>` or on [npmjs.com](https://www.npmjs.com/).
+GitHub releases are published to npm as staged versions. After staging, the release job summary shows the stage ID and package version; approve it with 2FA by running `axi-approve` or on [npmjs.com](https://www.npmjs.com/).
 
 To recover a release whose publish job failed, run the `release-please` workflow manually with the existing release tag in its `tag` input. This skips release-please and runs the publish job against that tag. For example, in the repository root:
 
