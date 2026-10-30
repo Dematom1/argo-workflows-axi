@@ -32,5 +32,21 @@ jobs:
       - run: pnpm run format:check
       - run: pnpm run lint
       - run: pnpm run build
+      - name: Verify packed CLI bins
+        run: |
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          npm pack --pack-destination "$tmp" >/dev/null
+          tar -xOzf "$tmp"/*.tgz package/package.json | node --input-type=commonjs -e '
+            const fs = require("node:fs");
+            const pkg = JSON.parse(fs.readFileSync(0, "utf8"));
+            for (const [name, path] of Object.entries({
+              "argo-workflows-axi": "dist/bin/argo-workflows-axi.js",
+              "argo-workflows-axi-ctx": "dist/bin/argo-workflows-axi-ctx.js",
+            })) {
+              if (pkg.bin?.[name] !== path) throw Error(`missing packed bin ${name}: ${pkg.bin?.[name]}`);
+              if (!fs.existsSync(path)) throw Error(`missing bin file ${path}`);
+            }
+          '
       - run: pnpm run check:skill
       - run: pnpm test

@@ -17,8 +17,8 @@
     "toon"
   ],
   "bin": {
-    "argo-workflows-axi": "./dist/bin/argo-workflows-axi.js",
-    "argo-workflows-axi-ctx": "./dist/bin/argo-workflows-axi-ctx.js"
+    "argo-workflows-axi": "dist/bin/argo-workflows-axi.js",
+    "argo-workflows-axi-ctx": "dist/bin/argo-workflows-axi-ctx.js"
   },
   "files": [
     "dist/bin",
