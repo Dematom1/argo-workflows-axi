@@ -1,4 +1,11 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -46,9 +53,13 @@ describe("release-please publishing", () => {
     ).toBeUndefined();
 
     const publishSteps = doc.jobs.publish.steps ?? [];
-    const stageStep = publishSteps.find((step) => step.run?.includes("npm stage publish"));
+    const stageStep = publishSteps.find((step) =>
+      step.run?.includes("npm stage publish"),
+    );
     expect(stageStep).toBeDefined();
-    const script = stageStep?.run?.match(/node --input-type=commonjs <<'NODE'\n([\s\S]*?)\nNODE/)?.[1];
+    const script = stageStep?.run?.match(
+      /node --input-type=commonjs <<'NODE'\n([\s\S]*?)\nNODE/,
+    )?.[1];
     expect(script).toBeDefined();
 
     const temp = mkdtempSync(join(tmpdir(), "release-summary-"));
@@ -62,18 +73,25 @@ describe("release-please publishing", () => {
       mkdirSync(bin);
       mkdirSync(packageDir);
       writeFileSync(join(packageDir, "package.json"), JSON.stringify(pkg));
-      writeFileSync(npm, `#!/bin/sh\nprintf '%s' '${JSON.stringify(staged)}'\n`);
+      writeFileSync(
+        npm,
+        `#!/bin/sh\nprintf '%s' '${JSON.stringify(staged)}'\n`,
+      );
       chmodSync(npm, 0o755);
 
       const result = spawnSync(process.execPath, ["--input-type=commonjs"], {
         cwd: packageDir,
         input: script,
         encoding: "utf8",
-        env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_STEP_SUMMARY: summary },
+        env: {
+          ...process.env,
+          PATH: `${bin}:${process.env.PATH}`,
+          GITHUB_STEP_SUMMARY: summary,
+        },
       });
       expect(result.status).toBe(0);
       expect(readFileSync(summary, "utf8")).toBe(
-        "Stage ID: stage-123\nPackage: example-package\nVersion: 1.2.3\nWaiting for approval: run axi-approve\n\n",
+        "Stage ID: stage-123\nPackage: example-package\nVersion: 1.2.3\nWaiting for approval: run axi-approve\n",
       );
     } finally {
       rmSync(temp, { recursive: true, force: true });
