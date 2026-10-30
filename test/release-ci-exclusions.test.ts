@@ -45,7 +45,13 @@ describe("release-please publishing", () => {
 
     const publishSteps = doc.jobs.publish.steps ?? [];
     expect(publishSteps.map((s) => s.run).join("\n")).toContain(
-      "npm stage publish --access public --provenance --json",
+      "npm stage publish --access public --provenance",
+    );
+    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
+      "['stage', 'list', pkg.name, '--json']",
+    );
+    expect(publishSteps.map((s) => s.run).join("\n")).toContain(
+      "entry.version === pkg.version",
     );
     expect(publishSteps.map((s) => s.run).join("\n")).toContain(
       "Waiting for approval: run axi-approve",
