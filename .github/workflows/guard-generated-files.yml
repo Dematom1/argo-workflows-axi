@@ -17,11 +17,12 @@ jobs:
   check:
     name: Generated files must not be hand-edited
     runs-on: ubuntu-latest
-    # release-please owns CHANGELOG.md and .release-please-manifest.json; its PR
-    # is the one legitimate place those files change, so we exempt its author.
+    # release-please owns CHANGELOG.md and .release-please-manifest.json; its
+    # Bot PRs are the legitimate place those files change, so exempt them.
     if: >-
       github.event.pull_request.user.login != 'github-actions[bot]' &&
-      github.event.pull_request.user.login != 'release-please[bot]'
+      github.event.pull_request.user.login != 'release-please[bot]' &&
+      !(github.event.pull_request.user.type == 'Bot' && startsWith(github.event.pull_request.head.ref, 'release-please--'))
     steps:
       # Actions are pinned to full commit SHAs (tags are mutable).
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
