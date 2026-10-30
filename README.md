@@ -23,11 +23,12 @@ running[2]{name,phase,age,progress}:
   ingest-q9w8e,Running,10m,2/5
   stuck-pp1,Pending,20m,""
 cron: 2 cron workflows (1 suspended)
-help[4]:
+help[5]:
   Run `argo-workflows-axi triage` for failing steps, hints and log tails
   Run `argo-workflows-axi wf get <name>` for one workflow's failed steps
   Run `argo-workflows-axi cron list` for schedules and last runs
   Run `argo-workflows-axi --help` for all commands
+  Run `argo-workflows-axi setup hooks` to install the session hook
 ```
 
 ## Requirements
@@ -55,7 +56,7 @@ npx -y argo-workflows-axi
 
 ### Give your agent the context: hook or skill
 
-You only need one of these. Install the session hook with `argo-workflows-axi setup hooks`.
+You only need one of these.
 
 - **Session hook (recommended).** It installs a user-scope SessionStart hook for Claude Code, Codex and OpenCode. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
 - **Skill.** `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi` installs a small skill that tells the agent when to reach for the tool. It defers all guidance to the CLI's own `--help`.
