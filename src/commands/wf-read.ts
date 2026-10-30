@@ -238,11 +238,21 @@ export async function wfList(args: string[]): Promise<Output> {
   if (redacted.count > 0)
     out.redacted = `${redacted.count} sensitive values hidden`;
   const help = [
-    `Run \`argo-workflows-axi wf get <name>${suffix}\` for phase, parameters and failed steps`,
+    `Run \`argo-workflows-axi wf get <name>${all ? `${suffix} -n <namespace>` : suffix}\` for phase, parameters and failed steps`,
   ];
   if (workflows.length > shown.length) {
+    const filters = [
+      ["--status", status],
+      ["--since", flagValue(parsed, "--since")],
+      ["--older", flagValue(parsed, "--older")],
+      ["--selector", selector],
+      ["--prefix", prefix],
+    ]
+      .filter((entry): entry is [string, string] => entry[1] !== undefined)
+      .map(([flag, value]) => `${flag} ${value}`);
+    if (all) filters.push("-A");
     help.push(
-      `Run \`argo-workflows-axi wf list --limit ${Math.min(workflows.length, 1000)}${suffix}\` to see all ${workflows.length}`,
+      `Run \`argo-workflows-axi wf list --limit 1000${filters.length ? ` ${filters.join(" ")}` : ""}${suffix}\` to show up to 1000 matching workflows`,
     );
   }
   if (workflows.some((wf) => ["Failed", "Error"].includes(phaseOf(wf)))) {
