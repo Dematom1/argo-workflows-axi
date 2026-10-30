@@ -121,6 +121,19 @@ describe("wf list", () => {
     );
   });
 
+  it("quotes whitespace in reconstructed filter values", () => {
+    const result = run(
+      ["wf", "list", "--limit", "1", "--prefix", "nightly batch"],
+      {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["list"], stdout: json(WORKFLOWS) },
+        ],
+      },
+    );
+    expect(result.stdout).toContain("--prefix 'nightly batch'");
+  });
+
   it("does not promise to show more than the 1000-row limit", () => {
     const result = run(["wf", "list", "--limit", "1"], {
       responses: [

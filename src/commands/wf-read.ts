@@ -19,6 +19,7 @@ import {
   age,
   duration,
   pluralize,
+  shellQuote,
   stripAnsi,
   truncateHead,
 } from "../format.js";
@@ -249,7 +250,7 @@ export async function wfList(args: string[]): Promise<Output> {
       ["--prefix", prefix],
     ]
       .filter((entry): entry is [string, string] => entry[1] !== undefined)
-      .map(([flag, value]) => `${flag} ${value}`);
+      .map(([flag, value]) => `${flag} ${shellQuote(value)}`);
     if (all) filters.push("-A");
     help.push(
       `Run \`argo-workflows-axi wf list --limit 1000${filters.length ? ` ${filters.join(" ")}` : ""}${suffix}\` to show up to 1000 matching workflows`,
