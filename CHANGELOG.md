@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.5](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.4...argo-workflows-axi-v0.1.5) (2026-10-30)
+
+
+### Bug Fixes
+
+* keep workflow logs and tree messages in structured output ([#18](https://github.com/Dematom1/argo-workflows-axi/issues/18)) ([80ea8db](https://github.com/Dematom1/argo-workflows-axi/commit/80ea8dbda545fcf35349224b2ff9515898fa0373))
+* **render:** keep help hints TOON-decodable ([#20](https://github.com/Dematom1/argo-workflows-axi/issues/20)) ([db57f92](https://github.com/Dematom1/argo-workflows-axi/commit/db57f9238e7b876e78bc7f1e62b53ee0c06d784b))
+* **wf:** preserve filters and scope in expansion hints ([#19](https://github.com/Dematom1/argo-workflows-axi/issues/19)) ([8303ab2](https://github.com/Dematom1/argo-workflows-axi/commit/8303ab297f28ce8d693446aea1b253efcfb80a9b))
+
 ## [0.1.4](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.3...argo-workflows-axi-v0.1.4) (2026-10-30)
 
 
