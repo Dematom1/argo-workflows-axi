@@ -157,7 +157,9 @@ function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
   return async (args) => {
     const [sub, ...rest] = args;
     if (sub === undefined || sub === "--help") return render(noun.help);
-    const handler = noun.subcommands[sub];
+    const handler = Object.hasOwn(noun.subcommands, sub)
+      ? noun.subcommands[sub]
+      : undefined;
     if (handler) return render(await handler(rest));
     if (REFUSALS[`${name} ${sub}`]) throw refused(`${name} ${sub}`);
     throw axiError(`Unknown subcommand: ${name} ${sub}`, "VALIDATION_ERROR", [

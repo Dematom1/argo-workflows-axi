@@ -1,3 +1,4 @@
+import { axiError } from "./errors.js";
 import { runRead, parseJson, type TargetArgs } from "./seam.js";
 
 /** The parts of the Argo Workflow object this tool reads (v3.7 - v4.1 shapes). */
@@ -203,8 +204,33 @@ export async function fetchWorkflows(
     target,
     timeoutMs: 60_000,
   });
-  const parsed = parseJson<Workflow[] | null>(stdout, "workflow list");
-  return Array.isArray(parsed) ? parsed : [];
+  const response = stdout.trim();
+  if (response === "" || response === "null") {
+    throw axiError(
+      "argo returned an empty response for workflow list",
+      "UNKNOWN",
+    );
+  }
+  const parsed = parseJson<unknown>(response, "workflow list");
+  if (
+    !Array.isArray(parsed) ||
+    !parsed.every(
+      (item) =>
+        item !== null &&
+        typeof item === "object" &&
+        "metadata" in item &&
+        item.metadata !== null &&
+        typeof item.metadata === "object" &&
+        "name" in item.metadata &&
+        typeof item.metadata.name === "string",
+    )
+  ) {
+    throw axiError(
+      "argo returned an unexpected workflow list response",
+      "UNKNOWN",
+    );
+  }
+  return parsed as Workflow[];
 }
 
 /** Whether the workflow is suspended (spec.suspend, or a running suspend node). */
