@@ -23,11 +23,12 @@ running[2]{name,phase,age,progress}:
   ingest-q9w8e,Running,10m,2/5
   stuck-pp1,Pending,20m,""
 cron: 2 cron workflows (1 suspended)
-help[4]:
+help[5]:
   Run `argo-workflows-axi triage` for failing steps, hints and log tails
   Run `argo-workflows-axi wf get <name>` for one workflow's failed steps
   Run `argo-workflows-axi cron list` for schedules and last runs
   Run `argo-workflows-axi --help` for all commands
+  Run `argo-workflows-axi setup hooks` to install the session hook
 ```
 
 ## Requirements
@@ -40,22 +41,24 @@ argo-workflows-axi adds no auth of its own. It uses whatever the `argo` CLI uses
 
 ## Install
 
-From source (until the first npm release):
+Install globally:
 
 ```sh
-git clone https://github.com/Dematom1/argo-workflows-axi.git
-cd argo-workflows-axi
-pnpm install && pnpm run build
-npm link            # puts argo-workflows-axi and argo-workflows-axi-ctx on PATH
+npm install -g argo-workflows-axi
+argo-workflows-axi
 ```
 
-After the first release: `npm install -g argo-workflows-axi`, or run it ad hoc with `npx -y argo-workflows-axi`.
+Or run without installing:
+
+```sh
+npx -y argo-workflows-axi
+```
 
 ### Give your agent the context: hook or skill
 
 You only need one of these.
 
-- **Session hook (recommended).** `argo-workflows-axi setup hooks` installs a user-scope SessionStart hook for Claude Code, Codex and OpenCode. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
+- **Session hook (recommended).** It installs a user-scope SessionStart hook for Claude Code, Codex and OpenCode. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
 - **Skill.** `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi` installs a small skill that tells the agent when to reach for the tool. It defers all guidance to the CLI's own `--help`.
 
 ## Commands
@@ -136,6 +139,18 @@ Errors go to stdout as `error`, `code` and `help` lines. Exit code 0 means the t
 When authentication fails, the tool says to ask the user to log in. An agent cannot complete SSO.
 
 ## Development
+
+To build from source, clone the repository and run:
+
+```sh
+git clone https://github.com/Dematom1/argo-workflows-axi.git
+cd argo-workflows-axi
+pnpm install
+pnpm run build
+npm link
+```
+
+Run checks with:
 
 ```sh
 pnpm install
