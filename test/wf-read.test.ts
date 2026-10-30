@@ -198,6 +198,26 @@ describe("wf get", () => {
     expect(result.stdout).toContain("  load-warehouse | Pod | Failed");
   });
 
+  it("uses --full for tree messages and hints only when a message is truncated", () => {
+    const wf = d.failedEtl();
+    const node = Object.values(wf.status?.nodes ?? {}).find(
+      (n) => n.type === "Pod" && n.phase === "Failed",
+    );
+    if (!node) throw new Error("fixture lacks failed pod");
+    node.message = "x".repeat(100);
+    const responses = [...KUBE_DEFAULTS, { match: ["get"], stdout: json(wf) }];
+    const preview = run(["wf", "get", "nightly-etl-x7k2p", "--tree"], {
+      responses,
+    });
+    expect(preview.stdout).toContain("truncated, 100 chars total");
+    expect(preview.stdout).toContain("--tree --full");
+    const full = run(["wf", "get", "nightly-etl-x7k2p", "--tree", "--full"], {
+      responses,
+    });
+    expect(full.stdout).toContain(`${"x".repeat(100)} (100 chars)`);
+    expect(full.stdout).not.toContain("--tree --full");
+  });
+
   it("maps argo's NotFound to NOT_FOUND with exit 1", () => {
     const result = run(["wf", "get", "nope"], {
       responses: [
@@ -233,9 +253,10 @@ describe("wf logs", () => {
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(`pod: ${pod} (failed step load-warehouse)`);
-    expect(result.stdout).toContain(
-      "--- log ---\nconnecting with password=[redacted]\nERROR load failed",
-    );
+    expect(result.stdout).toContain("log[2]:");
+    expect(result.stdout).toContain("connecting with password=[redacted]");
+    expect(result.stdout).toContain("ERROR load failed");
+    expect(result.stdout).not.toContain("--- log ---");
     expect(result.stdout).not.toContain("hunter2");
     expect(argoCalls(result)[1]).toEqual([
       "logs",
@@ -247,7 +268,7 @@ describe("wf logs", () => {
     ]);
   });
 
-  it("caps output at 20k chars keeping the tail and says what was cut", () => {
+  it("caps output at 20k chars and --full expands the bounded cap", () => {
     const pod = "nightly-etl-x7k2p-load-1234567890";
     const lines = Array.from(
       { length: 2000 },
@@ -263,8 +284,20 @@ describe("wf logs", () => {
     expect(result.stdout).toMatch(/truncated: kept the last \d+ of \d+ chars/);
     expect(result.stdout).toContain("line 01999");
     expect(result.stdout).not.toContain("line 00000");
-    const body = result.stdout.split("--- log ---\n")[1];
-    expect(body.length).toBeLessThanOrEqual(20_001);
+    expect(result.stdout).toContain("--full");
+    expect(result.stdout).not.toContain("line 00000");
+    const full = run(
+      ["wf", "logs", "nightly-etl-x7k2p", "--tail", "2000", "--full"],
+      {
+        responses: [
+          ...KUBE_DEFAULTS,
+          { match: ["get"], stdout: json(d.failedEtl()) },
+          { match: ["logs"], stdout: `${lines.join("\n")}\n` },
+        ],
+      },
+    );
+    expect(full.stdout).toContain("line 00000");
+    expect(full.stdout).not.toContain("truncated:");
   });
 
   it("states an empty log definitively", () => {
