@@ -1,7 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { encode } from "@toon-format/toon";
 import {
   ALL_NAMESPACES_FLAG,
   TARGET_FLAGS,
@@ -337,7 +336,7 @@ export function workflowSummary(
   return summary;
 }
 
-function treeLines(wf: Workflow): string[] {
+function treeLines(wf: Workflow, full: boolean): string[] {
   const nodes = wf.status?.nodes ?? {};
   const root =
     nodes[wf.metadata.name] ??
@@ -355,7 +354,7 @@ function treeLines(wf: Workflow): string[] {
     const d = duration(node.startedAt, node.finishedAt);
     if (d) bits.push(d);
     if (node.message && ["Failed", "Error"].includes(node.phase ?? "")) {
-      bits.push(truncateHead(node.message, 80).text);
+      bits.push(full ? `${node.message} (${node.message.length} chars)` : truncateHead(node.message, 80).text);
     }
     lines.push(bits.join(" | "));
     for (const childId of node.children ?? []) {
@@ -381,7 +380,9 @@ export async function wfGet(args: string[]): Promise<Output> {
   const out: Record<string, unknown> = { workflow: workflowSummary(wf, full) };
 
   if (hasFlag(parsed, "--tree")) {
-    out.tree = treeLines(wf);
+    out.tree = treeLines(wf, full);
+    if (!full && all.some((node) => node.message && ["Failed", "Error"].includes(node.phase ?? "") && node.message.length > 80))
+      out.help = [`Run \`argo-workflows-axi wf get ${wf.metadata.name} --tree --full${targetSuffix(parsed)}\` for untruncated tree messages`];
   } else if (hasFlag(parsed, "--nodes")) {
     out.nodes = `${all.length} of ${all.length} nodes shown`;
     out.all_nodes = all
@@ -408,7 +409,7 @@ export async function wfGet(args: string[]): Promise<Output> {
 
   const suffix = targetSuffix(parsed);
   const wfName = wf.metadata.name;
-  const help: string[] = [];
+  const help: string[] = Array.isArray(result.help) ? result.help.map(String) : [];
   if (failedRows.length > 0) {
     help.push(
       `Run \`argo-workflows-axi wf logs ${wfName}${suffix}\` for the failing step's logs`,
@@ -436,6 +437,7 @@ export const WF_LOGS_HELP = `command: argo-workflows-axi wf logs <name|@latest> 
 description: Bounded logs. Without <pod>, picks the failed step's pod; never follows or streams.
 flags:
   --tail <n>: Last lines per pod (default 100, max 5000)
+  --full: Include up to 1,000,000 log characters (default cap 20,000)
   --grep <regex>: Only lines matching
   --since <dur>: Only lines newer than this duration (90s, 10m, 2h)
   --previous: Logs of the previous container instance (after a restart)
@@ -449,7 +451,7 @@ examples[3]:
 
 const LOGS_SPEC = mergeSpecs(TARGET_FLAGS, {
   value: ["--tail", "--grep", "--since", "--container"],
-  bool: ["--previous"],
+  bool: ["--previous", "--full"],
   aliases: { "-c": "--container" },
 });
 
@@ -580,7 +582,8 @@ export async function wfLogs(args: string[]): Promise<Output> {
     },
     target,
   );
-  const log = shapeLog(raw, choice.pod);
+  const full = hasFlag(parsed, "--full");
+  const log = shapeLog(raw, choice.pod, full ? 1_000_000 : LOG_CHAR_CAP);
   const header: Record<string, unknown> = {
     workflow: `${wfName} (${phaseOf(wf)})`,
     pod: choice.pod ? `${choice.pod} (${choice.why})` : choice.why,
@@ -602,10 +605,12 @@ export async function wfLogs(args: string[]): Promise<Output> {
   header.lines = `${log.lines.length} shown (last ${tail} per pod${flagValue(parsed, "--grep") ? ", grep applied" : ""})`;
   if (log.truncated) {
     header.truncated = `kept the last ${log.text.length} of ${log.totalChars} chars`;
+    header.help = [`Run \`argo-workflows-axi wf logs ${wfName}${suffix} --full\` for up to 1,000,000 log characters`];
   }
+  header.log = log.lines;
   if (log.redactions > 0)
     header.redacted = `${log.redactions} sensitive values hidden (best effort)`;
-  return `${encode(header)}\n--- log ---\n${log.text}`;
+  return header;
 }
 
 // ---------------------------------------------------------------- wf wait
