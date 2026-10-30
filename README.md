@@ -165,6 +165,8 @@ Tests run the built CLI end to end against fake `argo` and `kubectl` executables
 
 ## Releases
 
+Release PRs are opened by the repository's GitHub App so their required checks run automatically. The release workflow requires the `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` repository secrets; if either is missing, its error explains the required App permissions and setup.
+
 GitHub releases are published to npm as staged versions. After staging, the release job summary shows the stage ID and package version; approve it with 2FA by running `axi-approve` or on [npmjs.com](https://www.npmjs.com/).
 
 To recover a release whose publish job failed, run the `release-please` workflow manually with the existing release tag in its `tag` input. This skips release-please and runs the publish job against that tag. For example, in the repository root:
