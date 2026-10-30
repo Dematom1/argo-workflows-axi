@@ -2,14 +2,13 @@ import { encode } from "@toon-format/toon";
 import { AxiError, exitCodeForError } from "axi-sdk-js";
 
 /**
- * TOON rendering with `help` hints as one line each (the gh-axi layout), so a
- * suggested command is never split by TOON's inline array quoting.
+ * TOON rendering with readable, decoder-compatible list-form `help` hints.
  */
 
 export function renderHelp(lines: string[]): string {
   return lines.length === 0
     ? ""
-    : `help[${lines.length}]:\n${lines.map((l) => `  ${l}`).join("\n")}`;
+    : `help[${lines.length}]:\n${lines.map((line) => `  - ${line}`).join("\n")}`;
 }
 
 export function render(output: Record<string, unknown> | string): string {

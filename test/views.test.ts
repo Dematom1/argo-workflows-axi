@@ -83,7 +83,7 @@ describe("home view", () => {
     expect(result.stdout).toContain("running[2]{name,phase,age,progress}:");
     expect(result.stdout).toContain("cron: 2 cron workflows (1 suspended)");
     expect(result.stdout).toContain(
-      "help[4]:\n  Run `argo-workflows-axi triage`",
+      "help[4]:\n  - Run `argo-workflows-axi triage`",
     );
     // A supported argo version is not worth a line in the home view.
     expect(result.stdout).not.toContain("argo:");
