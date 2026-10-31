@@ -194,18 +194,32 @@ function buildCommands(): Record<string, AxiCliCommand<undefined>> {
     context: rendered(async (args) => {
       if (args[0] === "end") {
         let payload: unknown;
-        try { payload = JSON.parse(await new Promise<string>((resolve, reject) => {
-          let body = "";
-          process.stdin.setEncoding("utf8");
-          process.stdin.on("data", (chunk: string) => { body += chunk; });
-          process.stdin.on("end", () => resolve(body));
-          process.stdin.on("error", reject);
-        })); } catch { return { recorded: false }; }
+        try {
+          payload = JSON.parse(
+            await new Promise<string>((resolve, reject) => {
+              let body = "";
+              process.stdin.setEncoding("utf8");
+              process.stdin.on("data", (chunk: string) => {
+                body += chunk;
+              });
+              process.stdin.on("end", () => resolve(body));
+              process.stdin.on("error", reject);
+            }),
+          );
+        } catch {
+          return { recorded: false };
+        }
         recordSession(payload);
         return { recorded: true };
       }
-      if (args.length === 0) return ctxView(parseArgs([], TARGET_FLAGS, "argo-workflows-axi context"));
-      throw axiError("Use `argo-workflows-axi context end` from the SessionEnd hook", "VALIDATION_ERROR");
+      if (args.length === 0)
+        return ctxView(
+          parseArgs([], TARGET_FLAGS, "argo-workflows-axi context"),
+        );
+      throw axiError(
+        "Use `argo-workflows-axi context end` from the SessionEnd hook",
+        "VALIDATION_ERROR",
+      );
     }),
     triage: rendered(triageCommand),
     ctx: rendered(ctxCommand),
