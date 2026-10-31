@@ -116,7 +116,9 @@ export async function homeView(): Promise<Record<string, unknown>> {
       "Run `argo-workflows-axi ctx` to check which context or server is targeted",
     );
   } else if (help.length === 0) {
-    help.push(`Run \`argo-workflows-axi wf list -n ${target.namespace}\` to list workflows`);
+    help.push(
+      `Run \`argo-workflows-axi wf list -n ${target.namespace}\` to list workflows`,
+    );
   }
   help.push("Run `argo-workflows-axi --help` for all commands");
   const redacted = redactValue(out);
