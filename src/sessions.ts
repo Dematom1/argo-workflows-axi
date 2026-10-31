@@ -3,7 +3,6 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
-  statSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -133,12 +132,7 @@ export function recordSession(payload: unknown): void {
       writeFileSync(lockPath, "", { flag: "wx", mode: 0o600 });
       locked = true;
     } catch {
-      try {
-        if (Date.now() - statSync(lockPath).mtimeMs > 30_000) rmSync(lockPath);
-      } catch {
-        // Lock disappeared while checking staleness.
-      }
-      if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
   if (!locked) return;
