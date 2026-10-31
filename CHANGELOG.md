@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.8](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.7...argo-workflows-axi-v0.1.8) (2026-10-31)
+
+
+### Features
+
+* add session-end command memory ([#27](https://github.com/Dematom1/argo-workflows-axi/issues/27)) ([fdf0d87](https://github.com/Dematom1/argo-workflows-axi/commit/fdf0d8758d3dfcc5efff579a7541042a9b85e39c))
+
 ## [0.1.7](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.6...argo-workflows-axi-v0.1.7) (2026-10-31)
 
 

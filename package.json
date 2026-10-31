@@ -1,6 +1,6 @@
 {
   "name": "argo-workflows-axi",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "AXI-compliant Argo Workflows CLI wrapper - token-efficient TOON output, read-first, previewed and allowlisted writes",
   "type": "module",
   "repository": {
