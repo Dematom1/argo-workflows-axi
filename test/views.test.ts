@@ -84,7 +84,7 @@ describe("home view", () => {
     expect(result.stdout).toContain("running[2]{name,phase,age,progress}:");
     expect(result.stdout).toContain("cron: 2 cron workflows (1 suspended)");
     expect(result.stdout).toContain(
-      "help[4]:\n  - Run `argo-workflows-axi triage`",
+      "help[4]:\n  - Run `argo-workflows-axi triage -n argo`",
     );
     // A supported argo version is not worth a line in the home view.
     expect(result.stdout).not.toContain("argo:");
@@ -113,7 +113,7 @@ describe("home view", () => {
     expect(result.exitCode).toBe(0);
     expect(decode(result.stdout)).toMatchObject({
       help: expect.arrayContaining([
-        "Run `argo-workflows-axi wf list -n argo --limit 1000` to show up to 1000 of 9 workflows",
+        "Run `argo-workflows-axi wf list -n argo --limit 1000` to show up to 1000 workflows (max 1000)",
       ]),
     });
   });
