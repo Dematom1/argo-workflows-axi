@@ -252,7 +252,7 @@ export async function wfList(args: string[]): Promise<Output> {
       .map(([flag, value]) => `${flag} ${shellQuote(value)}`);
     if (all) filters.push("-A");
     help.push(
-      `Run \`argo-workflows-axi wf list --limit 1000${filters.length ? ` ${filters.join(" ")}` : ""}${suffix}\` to show up to 1000 matching workflows`,
+      `Run \`argo-workflows-axi wf list --limit 1000${filters.length ? ` ${filters.join(" ")}` : ""}${suffix}\` to show up to 1000 matching workflows (max 1000)`,
     );
   }
   if (workflows.some((wf) => ["Failed", "Error"].includes(phaseOf(wf)))) {
