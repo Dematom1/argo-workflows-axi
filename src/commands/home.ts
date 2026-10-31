@@ -1,7 +1,7 @@
 import { parseArgs } from "../args.js";
 import { listCronWorkflows } from "../cron-data.js";
 import { errorMessage } from "../errors.js";
-import { age, truncateHead } from "../format.js";
+import { age, shellQuote, truncateHead } from "../format.js";
 import { redactValue } from "../redact.js";
 import { describeTarget, forwardTarget, resolveTarget } from "../target.js";
 import {
@@ -46,7 +46,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
     out.workflows = unavailable(error);
   }
 
-  const suffix = `-n ${target.namespace}`;
+  const suffix = `-n ${shellQuote(target.namespace)}`;
   const help: string[] = [];
   if (workflows) {
     if (workflows.length === 0) {
@@ -118,7 +118,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
     );
   } else if (help.length === 0) {
     help.push(
-      `Run \`argo-workflows-axi wf list -n ${target.namespace}\` to list workflows`,
+      `Run \`argo-workflows-axi wf list -n ${shellQuote(target.namespace)}\` to list workflows`,
     );
   }
   help.push("Run `argo-workflows-axi --help` for all commands");
