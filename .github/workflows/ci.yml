@@ -9,10 +9,6 @@ on:
 permissions:
   contents: read
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
   build-and-test:
     runs-on: ${{ matrix.os }}

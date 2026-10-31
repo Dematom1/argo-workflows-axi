@@ -74,22 +74,14 @@ function fakeBinDir(noKubectl: boolean): string {
   if (existing) return existing;
   const fakeBin = mkdtempSync(join(tmpdir(), "awf-axi-bin-"));
   for (const name of noKubectl ? ["argo"] : ["argo", "kubectl"]) {
-    if (process.platform === "win32") {
-      writeFileSync(
-        join(fakeBin, `${name}.cmd`),
-        `@"${process.execPath}" "${fakeCli}" ${name} %*\r\n`,
-      );
-    } else {
-      const shim = join(fakeBin, name);
-      writeFileSync(
-        shim,
-        `#!/bin/sh\nexec "${process.execPath}" "${fakeCli}" ${name} "$@"\n`,
-      );
-      chmodSync(shim, 0o755);
-    }
+    const shim = join(fakeBin, name);
+    writeFileSync(
+      shim,
+      `#!/bin/sh\nexec "${process.execPath}" "${fakeCli}" ${name} "$@"\n`,
+    );
+    chmodSync(shim, 0o755);
   }
-  if (process.platform !== "win32")
-    symlinkSync(process.execPath, join(fakeBin, "node"));
+  symlinkSync(process.execPath, join(fakeBin, "node"));
   fakeBins.set(noKubectl, fakeBin);
   return fakeBin;
 }
@@ -126,7 +118,6 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
 
   const env: Record<string, string> = {
     PATH: fakeBin,
-    ...(process.env.PATHEXT ? { PATHEXT: process.env.PATHEXT } : {}),
     HOME: home,
     XDG_CONFIG_HOME: configHome,
     KUBECONFIG: join(dir, "no-kubeconfig"),
