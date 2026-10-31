@@ -23,19 +23,36 @@ jobs:
     if: ${{ inputs.tag == '' }}
     runs-on: ubuntu-latest
     permissions:
-      # Commit the release PR's changes, then tag and create the GitHub release.
-      contents: write
-      # Open and update the release PR.
-      pull-requests: write
+      contents: read
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+      - name: Check release app secrets
+        env:
+          APP_ID: ${{ secrets.RELEASE_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$APP_ID" || -z "$APP_PRIVATE_KEY" ]]; then
+            echo "::error::Missing RELEASE_APP_ID or RELEASE_APP_PRIVATE_KEY repository secrets. Create a GitHub App with only Contents and Pull requests read/write, install it on this repository, and save its App ID and private key as these secrets."
+            exit 1
+          fi
+      - name: Create release app token
+        id: app-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
       # Actions are pinned to full commit SHAs (tags are mutable).
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
   # A separate job so install and package lifecycle scripts never hold repository
   # write access. If it fails, "Re-run failed jobs" retries it with the outputs

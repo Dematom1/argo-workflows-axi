@@ -105,7 +105,12 @@ describe("release-please publishing", () => {
         ...Object.entries(s.with ?? {}),
       ])
       .filter(([, value]) => String(value).includes("secrets."));
-    expect(secretRefs).toEqual([["token", "${{ secrets.GITHUB_TOKEN }}"]]);
+    expect(secretRefs).toEqual([
+      ["APP_ID", "${{ secrets.RELEASE_APP_ID }}"],
+      ["APP_PRIVATE_KEY", "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"],
+      ["app-id", "${{ secrets.RELEASE_APP_ID }}"],
+      ["private-key", "${{ secrets.RELEASE_APP_PRIVATE_KEY }}"],
+    ]);
     expect(publishSteps.flatMap((s) => Object.keys(s.env ?? {}))).not.toContain(
       "NODE_AUTH_TOKEN",
     );
