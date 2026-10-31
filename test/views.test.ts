@@ -113,7 +113,7 @@ describe("home view", () => {
     expect(result.exitCode).toBe(0);
     expect(decode(result.stdout)).toMatchObject({
       help: expect.arrayContaining([
-        "Run `argo-workflows-axi wf list -n argo` to show up to 1000 of 9 workflows",
+        "Run `argo-workflows-axi wf list -n argo --limit 1000` to show up to 1000 of 9 workflows",
       ]),
     });
   });

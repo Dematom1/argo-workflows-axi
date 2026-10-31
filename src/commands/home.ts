@@ -90,7 +90,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
       }
       if (failed.length > SHOWN || running.length > SHOWN) {
         help.push(
-          `Run \`argo-workflows-axi wf list -n ${target.namespace}\` to show up to 1000 of ${workflows.length} workflows`,
+          `Run \`argo-workflows-axi wf list -n ${target.namespace} --limit 1000\` to show up to 1000 of ${workflows.length} workflows`,
         );
       }
     }
