@@ -28,7 +28,7 @@ help[5]:
   Run `argo-workflows-axi wf get <name>` for one workflow's failed steps
   Run `argo-workflows-axi cron list` for schedules and last runs
   Run `argo-workflows-axi --help` for all commands
-  Run `argo-workflows-axi setup hooks` to install the session hook
+  Run `argo-workflows-axi setup hooks` to install the session hooks
 ```
 
 ## Requirements
@@ -58,7 +58,7 @@ npx -y argo-workflows-axi
 
 You only need one of these.
 
-- **Session hook (recommended).** It installs a user-scope SessionStart hook for Claude Code, Codex and OpenCode. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. It never touches the network, a keychain or SSO.
+- **Session hook (recommended).** It installs user-scope SessionStart hooks for Claude Code, Codex and OpenCode, plus a Claude Code SessionEnd hook. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. At session end, Claude Code records command names and counts, plus the most-used target and namespace, per working directory; it does not store command arguments or flag values. `ctx` includes the latest record as `last_session`. Run `argo-workflows-axi setup uninstall` to remove the hooks. Session start never touches the network, a keychain or SSO.
 - **Skill.** `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi` installs a small skill that tells the agent when to reach for the tool. It defers all guidance to the CLI's own `--help`.
 
 ## Commands
@@ -75,7 +75,7 @@ You only need one of these.
 | `cron list\|get`, `template list\|get\|lint`, `clustertemplate list\|get` | Cron workflows and templates (template `get` shows input parameters with defaults)                                   |
 | `archive list\|get`                                                       | Archived workflows (Argo Server mode only)                                                                           |
 | `ctx`                                                                     | Offline target view                                                                                                  |
-| `setup hooks`                                                             | Install the SessionStart hook                                                                                        |
+| `setup hooks`                                                             | Install session hooks; `setup uninstall` removes them                                                                |
 | `update`                                                                  | Upgrade the tool                                                                                                     |
 
 Writes (preview unless `--apply`): `wf submit`, `wf retry`, `wf resubmit`, `wf stop`, `wf terminate`, `wf suspend`, `wf resume`, `cron suspend`, `cron resume`.

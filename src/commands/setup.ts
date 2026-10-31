@@ -1,34 +1,62 @@
-import { existsSync, realpathSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { installSessionStartHooks, sessionStartHookStatus } from "axi-sdk-js";
+import {
+  installSessionStartHooks,
+  sessionStartHookStatus,
+  uninstallSessionStartHooks,
+} from "axi-sdk-js";
 import { parseArgs, requirePositionals } from "../args.js";
 import { axiError } from "../errors.js";
 
-/**
- * `setup hooks`: explicit opt-in to SessionStart context (AXI principle 7).
- * The hook runs the separate `argo-workflows-axi-ctx` entrypoint, which is the
- * offline `ctx` view (design S17): session start never touches the network.
- */
-
 export const SETUP_HELP = `command: argo-workflows-axi setup hooks
-description: Install or repair user-scope SessionStart hooks (Claude Code, Codex, OpenCode) that show the offline ctx view at session start
+ description: Install or repair session hooks, including Claude Code SessionEnd memory
 examples[1]:
   argo-workflows-axi setup hooks
 `;
 
 const MARKER = "argo-workflows-axi";
 const CTX_BIN = "argo-workflows-axi-ctx";
-
+type Settings = { hooks?: Record<string, unknown> } & Record<string, unknown>;
+type Group = { hooks?: Hook[]; matcher?: string; [key: string]: unknown };
+type Hook = { command?: string; [key: string]: unknown };
+function readSettings(path: string): Settings {
+  let contents: string;
+  try {
+    contents = readFileSync(path, "utf8");
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT")
+      return {};
+    throw axiError(`Could not read Claude settings at ${path}`, "UNKNOWN");
+  }
+  try {
+    const parsed: unknown = JSON.parse(contents);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      throw new Error("Expected settings object");
+    return parsed as Settings;
+  } catch {
+    throw axiError(
+      `Could not parse Claude settings at ${path}`,
+      "VALIDATION_ERROR",
+    );
+  }
+}
 function ctxEntrypoint(): string {
   const main = realpathSync(process.argv[1] ?? "");
   const candidate = join(dirname(main), `${CTX_BIN}.js`);
-  if (!existsSync(candidate)) {
+  if (!existsSync(candidate))
     throw axiError(
       `Could not find the ${CTX_BIN} entrypoint next to ${main}`,
       "UNKNOWN",
       ["Reinstall with `npm install -g argo-workflows-axi`"],
     );
-  }
   return candidate;
 }
 
@@ -36,38 +64,86 @@ export async function setupCommand(
   args: string[],
 ): Promise<Record<string, unknown> | string> {
   if (args.includes("--help") || args.length === 0) return SETUP_HELP;
-  const usage = "argo-workflows-axi setup hooks";
+  const usage = "argo-workflows-axi setup hooks|uninstall";
   const parsed = parseArgs(args, {}, usage);
   const [sub] = requirePositionals(parsed, 1, 1, usage);
-  if (sub !== "hooks") {
+  if (sub !== "hooks" && sub !== "uninstall")
     throw axiError(`Unknown setup command: ${sub}`, "VALIDATION_ERROR", [
       `Run \`${usage}\``,
     ]);
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+  const markerCommand = `argo-workflows-axi context end # ${MARKER}`;
+  if (sub === "uninstall") {
+    readSettings(settingsPath);
+    uninstallSessionStartHooks({ marker: MARKER, scope: "user" });
+    const settings = readSettings(settingsPath);
+    const hooks = settings.hooks;
+    const groups = hooks?.SessionEnd;
+    if (Array.isArray(groups)) {
+      const remaining = (groups as Group[])
+        .map((group) => ({
+          ...group,
+          hooks: group.hooks?.filter(
+            (hook) => !hook.command?.includes(markerCommand),
+          ),
+        }))
+        .filter((group) => group.hooks?.length);
+      if (hooks) {
+        if (remaining.length) hooks.SessionEnd = remaining;
+        else delete hooks.SessionEnd;
+      }
+    }
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", {
+      mode: 0o600,
+    });
+    chmodSync(settingsPath, 0o600);
+    return { setup: "hooks uninstalled", scope: "user" };
   }
-  const scope = "user";
 
+  readSettings(settingsPath);
   const errors: string[] = [];
-  const execPath = ctxEntrypoint();
   installSessionStartHooks({
     marker: MARKER,
-    execPath,
+    execPath: ctxEntrypoint(),
     binaryNames: [CTX_BIN],
     distEntrypoints: [`dist/bin/${CTX_BIN}.js`],
-    scope,
+    scope: "user",
     onError: (message) => errors.push(message),
   });
-  const status = sessionStartHookStatus({ marker: MARKER, scope });
+  const settings = readSettings(settingsPath);
+  settings.hooks ??= {};
+  const groups = settings.hooks.SessionEnd;
+  const retained = (Array.isArray(groups) ? (groups as Group[]) : [])
+    .map((group) => ({
+      ...group,
+      hooks: group.hooks?.filter(
+        (hook) => !hook.command?.includes(`# ${MARKER}`),
+      ),
+    }))
+    .filter((group) => group.hooks?.length);
+  retained.push({
+    matcher: "",
+    hooks: [{ type: "command", command: markerCommand, timeout: 10 }],
+  });
+  settings.hooks.SessionEnd = retained;
+  mkdirSync(dirname(settingsPath), { recursive: true });
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", {
+    mode: 0o600,
+  });
+  chmodSync(settingsPath, 0o600);
+  const status = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const out: Record<string, unknown> = {
     setup:
       errors.length === 0
         ? "hooks installed or already up to date"
         : "hooks partially installed",
-    scope,
+    scope: "user",
     runs: `${CTX_BIN} (offline - no network or credentials)`,
     claude: status.claude.installed ? "installed" : "not installed",
     codex: status.codex.installed ? "installed" : "not installed",
     opencode: status.opencode.installed ? "installed" : "not installed",
+    session_end: "installed",
   };
-  if (errors.length > 0) out.errors = errors;
+  if (errors.length) out.errors = errors;
   return out;
 }

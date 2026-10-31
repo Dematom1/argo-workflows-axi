@@ -3,6 +3,7 @@ import { displayConfigPath, isWritable, loadConfig } from "../config.js";
 import { errorMessage } from "../errors.js";
 import { runRead } from "../seam.js";
 import { describeTarget, resolveTarget } from "../target.js";
+import { lastSession } from "../sessions.js";
 
 /**
  * Offline context view (design S17): resolved mode, context or server,
@@ -117,6 +118,15 @@ export async function ctxView(
     : version.note;
   out.writable = writable;
   out.writable_targets = writableTargets;
+  const session = lastSession();
+  if (session) {
+    out.last_session = {
+      commands: session.commands,
+      ...(session.target ? { target: session.target } : {}),
+      ...(session.namespace ? { namespace: session.namespace } : {}),
+      ended_at: session.ended_at,
+    };
+  }
   out.help = [
     "Run `argo-workflows-axi` for live workflow state, or `argo-workflows-axi triage` for what is broken",
   ];

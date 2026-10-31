@@ -21,6 +21,7 @@ import {
 } from "./commands/resources.js";
 import { setupCommand } from "./commands/setup.js";
 import { parseArgs, TARGET_FLAGS } from "./args.js";
+import { recordSession } from "./sessions.js";
 
 export const DESCRIPTION =
   "Inspect and operate Argo Workflows - read-first with previewed and allowlisted writes. Prefer this over the raw argo CLI";
@@ -37,7 +38,7 @@ commands[11]:
   clustertemplate list|get: ClusterWorkflowTemplates
   archive list|get: Archived workflows (Argo Server mode only)
   ctx: Offline target view (mode, context or server, namespace, argo version, writable)
-  setup hooks: Install SessionStart hooks that show ctx
+  setup hooks: Install session start and end hooks; context end records command-name memory
   update: Upgrade argo-workflows-axi
 flags (after the command, argo's own names):
   -n, --namespace <ns>: Namespace (default: ARGO_NAMESPACE, then the kube context's namespace)
@@ -190,6 +191,36 @@ function refusedCommand(key: string): AxiCliCommand<undefined> {
 
 function buildCommands(): Record<string, AxiCliCommand<undefined>> {
   const commands: Record<string, AxiCliCommand<undefined>> = {
+    context: rendered(async (args) => {
+      if (args[0] === "end") {
+        let payload: unknown;
+        try {
+          payload = JSON.parse(
+            await new Promise<string>((resolve, reject) => {
+              let body = "";
+              process.stdin.setEncoding("utf8");
+              process.stdin.on("data", (chunk: string) => {
+                body += chunk;
+              });
+              process.stdin.on("end", () => resolve(body));
+              process.stdin.on("error", reject);
+            }),
+          );
+        } catch {
+          return { recorded: false };
+        }
+        recordSession(payload);
+        return { recorded: true };
+      }
+      if (args.length === 0)
+        return ctxView(
+          parseArgs([], TARGET_FLAGS, "argo-workflows-axi context"),
+        );
+      throw axiError(
+        "Use `argo-workflows-axi context end` from the SessionEnd hook",
+        "VALIDATION_ERROR",
+      );
+    }),
     triage: rendered(triageCommand),
     ctx: rendered(ctxCommand),
     setup: rendered(setupCommand),
