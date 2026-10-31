@@ -46,6 +46,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
     out.workflows = unavailable(error);
   }
 
+  const suffix = `-n ${target.namespace}`;
   const help: string[] = [];
   if (workflows) {
     if (workflows.length === 0) {
@@ -74,10 +75,10 @@ export async function homeView(): Promise<Record<string, unknown>> {
           message: truncateHead(wf.status?.message ?? "", 120).text,
         }));
         help.push(
-          "Run `argo-workflows-axi triage` for failing steps, hints and log tails",
+          `Run \`argo-workflows-axi triage ${suffix}\` for failing steps, hints and log tails`,
         );
         help.push(
-          "Run `argo-workflows-axi wf get <name>` for one workflow's failed steps",
+          `Run \`argo-workflows-axi wf get <name> ${suffix}\` for one workflow's failed steps`,
         );
       }
       if (running.length > 0) {
@@ -90,7 +91,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
       }
       if (failed.length > SHOWN || running.length > SHOWN) {
         help.push(
-          `Run \`argo-workflows-axi wf list -n ${target.namespace} --limit 1000\` to show up to 1000 of ${workflows.length} workflows`,
+          `Run \`argo-workflows-axi wf list ${suffix} --limit 1000\` to show up to 1000 workflows (max 1000)`,
         );
       }
     }
@@ -105,7 +106,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
         : `${crons.length} cron workflows (${suspended} suspended)`;
     if (crons.length > 0)
       help.push(
-        "Run `argo-workflows-axi cron list` for schedules and last runs",
+        `Run \`argo-workflows-axi cron list ${suffix}\` for schedules and last runs`,
       );
   } catch (error) {
     out.cron = unavailable(error);
