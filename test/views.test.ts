@@ -1,3 +1,4 @@
+import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import * as d from "./fixtures/data.js";
 import {
@@ -87,6 +88,34 @@ describe("home view", () => {
     );
     // A supported argo version is not worth a line in the home view.
     expect(result.stdout).not.toContain("argo:");
+  });
+
+  it("describes the list expansion cap in its hint", () => {
+    const workflows = [
+      ...WORKFLOWS,
+      ...Array.from({ length: 4 }, (_, index) => {
+        const workflow = d.failedEtl();
+        const metadata = workflow.metadata as Record<string, unknown>;
+        return {
+          ...workflow,
+          metadata: { ...metadata, name: `failed-extra-${index}` },
+        };
+      }),
+    ];
+    const result = run([], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        VERSION_OK,
+        { match: ["list", "--output=json"], stdout: json(workflows) },
+        ...CRONS,
+      ],
+    });
+    expect(result.exitCode).toBe(0);
+    expect(decode(result.stdout)).toMatchObject({
+      help: expect.arrayContaining([
+        "Run `argo-workflows-axi wf list` to show up to 1000 of 9 workflows",
+      ]),
+    });
   });
 
   it("degrades each sub-call to `unavailable - reason` with exit 0", () => {
