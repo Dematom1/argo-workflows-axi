@@ -90,7 +90,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
       }
       if (failed.length > SHOWN || running.length > SHOWN) {
         help.push(
-          `Run \`argo-workflows-axi wf list\` to show up to 1000 of ${workflows.length} workflows`,
+          `Run \`argo-workflows-axi wf list -n ${target.namespace}\` to show up to 1000 of ${workflows.length} workflows`,
         );
       }
     }
@@ -116,7 +116,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
       "Run `argo-workflows-axi ctx` to check which context or server is targeted",
     );
   } else if (help.length === 0) {
-    help.push("Run `argo-workflows-axi wf list` to list workflows");
+    help.push(`Run \`argo-workflows-axi wf list -n ${target.namespace}\` to list workflows`);
   }
   help.push("Run `argo-workflows-axi --help` for all commands");
   const redacted = redactValue(out);
