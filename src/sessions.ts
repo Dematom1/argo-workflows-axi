@@ -147,7 +147,8 @@ export function recordSession(payload: unknown): void {
       } catch {
         // Lock disappeared while checking staleness.
       }
-      if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      if (!locked)
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
   if (!locked) return;
@@ -184,7 +185,11 @@ function processIsAlive(pid: number): boolean {
     process.kill(pid, 0);
     return true;
   } catch (error) {
-    return !(error instanceof Error && "code" in error && error.code === "ESRCH");
+    return !(
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ESRCH"
+    );
   }
 }
 
