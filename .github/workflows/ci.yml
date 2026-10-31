@@ -11,9 +11,10 @@ permissions:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        os: [ubuntu-latest, macos-latest]
         node-version: [20, 24]
     steps:
       # Actions are pinned to full commit SHAs (tags are mutable).
