@@ -88,7 +88,13 @@ function spawn(
     const child = execFile(
       op.bin,
       argv,
-      { env, maxBuffer: MAX_BUFFER, timeout: timeoutMs, killSignal: "SIGKILL" },
+      {
+        env,
+        maxBuffer: MAX_BUFFER,
+        timeout: timeoutMs,
+        killSignal: "SIGKILL",
+        shell: process.platform === "win32",
+      },
       (error, stdout, stderr) => {
         if (!error) {
           resolve({ stdout, stderr, exitCode: 0 });
