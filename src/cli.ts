@@ -163,7 +163,7 @@ function rendered(handler: Handler): AxiCliCommand<undefined> {
 function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
   return async (args) => {
     const [sub, ...rest] = args;
-    if (sub === undefined || sub === "--help") return render(noun.help);
+    if (sub === undefined || sub === "--help") return renderPresentation(noun.help);
     const handler = Object.hasOwn(noun.subcommands, sub)
       ? noun.subcommands[sub]
       : undefined;
