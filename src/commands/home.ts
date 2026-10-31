@@ -52,7 +52,7 @@ export async function homeView(): Promise<Record<string, unknown>> {
     if (workflows.length === 0) {
       out.workflows = `0 workflows in namespace ${target.namespace}`;
       help.push(
-        "Run `argo-workflows-axi template list` to see templates you can submit from",
+        `Run \`argo-workflows-axi template list ${suffix}\` to see templates you can submit from`,
       );
     } else {
       out.workflows = `${workflows.length} total (${phaseTally(workflows)})`;
