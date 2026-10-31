@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.6...argo-workflows-axi-v0.1.7) (2026-10-31)
+
+
+### Bug Fixes
+
+* **cli:** encode data-bearing string outputs as TOON ([#24](https://github.com/Dematom1/argo-workflows-axi/issues/24)) ([66a5ccd](https://github.com/Dematom1/argo-workflows-axi/commit/66a5ccda4e1b111e2224107788bfb508b29a265e))
+
 ## [0.1.6](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.5...argo-workflows-axi-v0.1.6) (2026-10-31)
 
 
