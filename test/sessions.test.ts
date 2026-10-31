@@ -1,4 +1,10 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,7 +21,23 @@ describe("session memory", () => {
     const root = mkdtempSync(join(tmpdir(), "axi-session-"));
     process.env.XDG_CONFIG_HOME = root;
     const transcript = join(root, "transcript.jsonl");
-    writeFileSync(transcript, JSON.stringify({ message: { content: [{ type: "tool_use", name: "Bash", input: { command: "argo-workflows-axi wf list --context=dev -n argo --token TOP_SECRET" } }] } }));
+    writeFileSync(
+      transcript,
+      JSON.stringify({
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Bash",
+              input: {
+                command:
+                  "argo-workflows-axi wf list --context=dev -n argo --token TOP_SECRET",
+              },
+            },
+          ],
+        },
+      }),
+    );
     recordSession({ transcript_path: transcript, cwd: "/work/project" });
     const contents = readFileSync(sessionsPath(), "utf8");
     expect(contents).not.toContain("TOP_SECRET");
@@ -30,8 +52,29 @@ describe("session memory", () => {
     const root = mkdtempSync(join(tmpdir(), "axi-session-"));
     process.env.XDG_CONFIG_HOME = root;
     const transcript = join(root, "transcript.jsonl");
-    const commands = ["--context=dev -n argo", "--context=dev -n argo", "--context=prod -n other"];
-    writeFileSync(transcript, commands.map((args) => JSON.stringify({ message: { content: [{ type: "tool_use", name: "Bash", input: { command: `argo-workflows-axi wf list ${args}` } }] } })).join("\n"));
+    const commands = [
+      "--context=dev -n argo",
+      "--context=dev -n argo",
+      "--context=prod -n other",
+    ];
+    writeFileSync(
+      transcript,
+      commands
+        .map((args) =>
+          JSON.stringify({
+            message: {
+              content: [
+                {
+                  type: "tool_use",
+                  name: "Bash",
+                  input: { command: `argo-workflows-axi wf list ${args}` },
+                },
+              ],
+            },
+          }),
+        )
+        .join("\n"),
+    );
     recordSession({ transcript_path: transcript, cwd: "/work/project" });
     expect(lastSession("/work/project")?.target).toBe("dev");
     expect(lastSession("/work/project")?.namespace).toBe("argo");
