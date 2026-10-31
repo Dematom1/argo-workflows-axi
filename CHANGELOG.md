@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.6](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.5...argo-workflows-axi-v0.1.6) (2026-10-31)
+
+
+### Bug Fixes
+
+* **home:** clarify workflow list hints ([#22](https://github.com/Dematom1/argo-workflows-axi/issues/22)) ([3776a9f](https://github.com/Dematom1/argo-workflows-axi/commit/3776a9f850ea7938652fbfb2a62e63f87f2d0359))
+
 ## [0.1.5](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.4...argo-workflows-axi-v0.1.5) (2026-10-30)
 
 
