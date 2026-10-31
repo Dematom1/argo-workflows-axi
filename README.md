@@ -4,7 +4,7 @@
   <a href="https://www.npmjs.com/package/argo-workflows-axi"><img alt="npm" src="https://img.shields.io/npm/v/argo-workflows-axi?style=flat-square" /></a>
   <a href="https://github.com/Dematom1/argo-workflows-axi/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argo-workflows-axi/ci.yml?style=flat-square&label=ci" /></a>
   <a href="https://github.com/Dematom1/argo-workflows-axi/actions/workflows/release-please.yml"><img alt="Release" src="https://img.shields.io/github/actions/workflow/status/Dematom1/argo-workflows-axi/release-please.yml?style=flat-square&label=release" /></a>
-  <a href="https://img.shields.io/badge/platform-Linux-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-Linux-blue?style=flat-square" /></a>
+  <a href="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue?style=flat-square"><img alt="Platform" src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-blue?style=flat-square" /></a>
   <a href="https://x.com/dematom1"><img alt="X" src="https://img.shields.io/badge/X-@dematom1-black?style=flat-square" /></a>
 </p>
 
@@ -32,6 +32,8 @@ help[5]:
 ```
 
 ## Requirements
+
+Tested on Linux and macOS. Windows is not currently supported: printed command examples use POSIX shell quoting, which is not copy-pasteable in the default Windows shell.
 
 - Node.js 20 or newer
 - The [`argo` CLI](https://github.com/argoproj/argo-workflows/releases), **v3.7 through v4.1** (`ctx` warns outside that range)
