@@ -138,7 +138,9 @@ export function recordSession(payload: unknown): void {
   if (!locked) return;
   const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
   try {
-    const current = readSessions().filter((session) => session.cwd !== input.cwd);
+    const current = readSessions().filter(
+      (session) => session.cwd !== input.cwd,
+    );
     current.push({
       cwd: input.cwd,
       commands,
@@ -146,7 +148,9 @@ export function recordSession(payload: unknown): void {
       ...(namespace ? { namespace } : {}),
       ended_at: new Date().toISOString(),
     });
-    writeFileSync(tempPath, JSON.stringify(current.slice(-100)), { mode: 0o600 });
+    writeFileSync(tempPath, JSON.stringify(current.slice(-100)), {
+      mode: 0o600,
+    });
     chmodSync(tempPath, 0o600);
     renameSync(tempPath, path);
   } finally {
