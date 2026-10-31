@@ -33,8 +33,8 @@ export function recordSession(payload: unknown): void {
   let transcript: string;
   try { transcript = readFileSync(input.transcript_path, "utf8"); } catch { return; }
   const commands: Record<string, number> = {};
-  let target: string | undefined;
-  let namespace: string | undefined;
+  const targets = new Map<string, number>();
+  const namespaces = new Map<string, number>();
   for (const line of transcript.split(/\r?\n/)) {
     try {
       const entry: unknown = JSON.parse(line);
@@ -53,12 +53,15 @@ export function recordSession(payload: unknown): void {
         commands[match[1]] = (commands[match[1]] ?? 0) + 1;
         const context = /(?:^|\s)--context(?:=|\s+)([^\s]+)/.exec(command)?.[1];
         const ns = /(?:^|\s)(?:-n|--namespace)(?:=|\s+)([^\s]+)/.exec(command)?.[1];
-        if (context) target = context;
-        if (ns) namespace = ns;
+        if (context) targets.set(context, (targets.get(context) ?? 0) + 1);
+        if (ns) namespaces.set(ns, (namespaces.get(ns) ?? 0) + 1);
       }
     } catch { /* Ignore non-JSON transcript lines. */ }
   }
   const sessions = readSessions().filter((session) => session.cwd !== input.cwd);
+  const mostUsed = (counts: Map<string, number>) => [...counts].reduce<[string, number] | undefined>((best, entry) => !best || entry[1] > best[1] ? entry : best, undefined)?.[0];
+  const target = mostUsed(targets);
+  const namespace = mostUsed(namespaces);
   sessions.push({ cwd: input.cwd, commands, ...(target ? { target } : {}), ...(namespace ? { namespace } : {}), ended_at: new Date().toISOString() });
   const path = sessionsPath();
   mkdirSync(join(path, ".."), { recursive: true });

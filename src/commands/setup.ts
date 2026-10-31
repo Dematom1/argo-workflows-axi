@@ -17,10 +17,17 @@ type Settings = { hooks?: Record<string, unknown> } & Record<string, unknown>;
 type Group = { hooks?: Hook[]; matcher?: string; [key: string]: unknown };
 type Hook = { command?: string; [key: string]: unknown };
 function readSettings(path: string): Settings {
+  let contents: string;
+  try { contents = readFileSync(path, "utf8"); }
+  catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return {};
+    throw axiError(`Could not read Claude settings at ${path}`, "UNKNOWN");
+  }
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Settings : {};
-  } catch { return {}; }
+    const parsed: unknown = JSON.parse(contents);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw new Error("Expected settings object");
+    return parsed as Settings;
+  } catch { throw axiError(`Could not parse Claude settings at ${path}`, "VALIDATION_ERROR"); }
 }
 function ctxEntrypoint(): string {
   const main = realpathSync(process.argv[1] ?? "");
@@ -38,8 +45,8 @@ export async function setupCommand(args: string[]): Promise<Record<string, unkno
   const settingsPath = join(homedir(), ".claude", "settings.json");
   const markerCommand = `argo-workflows-axi context end # ${MARKER}`;
   if (sub === "uninstall") {
-    uninstallSessionStartHooks({ marker: MARKER, scope: "user" });
     const settings = readSettings(settingsPath);
+    uninstallSessionStartHooks({ marker: MARKER, scope: "user" });
     const hooks = settings.hooks;
     const groups = hooks?.SessionEnd;
     if (Array.isArray(groups)) {
@@ -54,9 +61,9 @@ export async function setupCommand(args: string[]): Promise<Record<string, unkno
     return { setup: "hooks uninstalled", scope: "user" };
   }
 
+  const settings = readSettings(settingsPath);
   const errors: string[] = [];
   installSessionStartHooks({ marker: MARKER, execPath: ctxEntrypoint(), binaryNames: [CTX_BIN], distEntrypoints: [`dist/bin/${CTX_BIN}.js`], scope: "user", onError: (message) => errors.push(message) });
-  const settings = readSettings(settingsPath);
   settings.hooks ??= {};
   const groups = settings.hooks.SessionEnd;
   const retained = (Array.isArray(groups) ? groups as Group[] : []).map((group) => ({ ...group, hooks: group.hooks?.filter((hook) => !hook.command?.includes(`# ${MARKER}`)) })).filter((group) => group.hooks?.length);

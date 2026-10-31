@@ -26,6 +26,17 @@ describe("session memory", () => {
     expect(readFileSync(sessionsPath()).length).toBeGreaterThan(0);
   });
 
+  it("records the most-used target and namespace, breaking ties by first seen", () => {
+    const root = mkdtempSync(join(tmpdir(), "axi-session-"));
+    process.env.XDG_CONFIG_HOME = root;
+    const transcript = join(root, "transcript.jsonl");
+    const commands = ["--context=dev -n argo", "--context=dev -n argo", "--context=prod -n other"];
+    writeFileSync(transcript, commands.map((args) => JSON.stringify({ message: { content: [{ type: "tool_use", name: "Bash", input: { command: `argo-workflows-axi wf list ${args}` } }] } })).join("\n"));
+    recordSession({ transcript_path: transcript, cwd: "/work/project" });
+    expect(lastSession("/work/project")?.target).toBe("dev");
+    expect(lastSession("/work/project")?.namespace).toBe("argo");
+  });
+
   it("tolerates corrupt session files", () => {
     const root = mkdtempSync(join(tmpdir(), "axi-session-"));
     process.env.XDG_CONFIG_HOME = root;
