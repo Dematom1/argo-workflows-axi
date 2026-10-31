@@ -1,4 +1,13 @@
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -108,9 +117,6 @@ export function recordSession(payload: unknown): void {
       /* Ignore non-JSON transcript lines. */
     }
   }
-  const sessions = readSessions().filter(
-    (session) => session.cwd !== input.cwd,
-  );
   const mostUsed = (counts: Map<string, number>) =>
     [...counts].reduce<[string, number] | undefined>(
       (best, entry) => (!best || entry[1] > best[1] ? entry : best),
@@ -118,17 +124,73 @@ export function recordSession(payload: unknown): void {
     )?.[0];
   const target = mostUsed(targets);
   const namespace = mostUsed(namespaces);
-  sessions.push({
-    cwd: input.cwd,
-    commands,
-    ...(target ? { target } : {}),
-    ...(namespace ? { namespace } : {}),
-    ended_at: new Date().toISOString(),
-  });
   const path = sessionsPath();
   mkdirSync(join(path, ".."), { recursive: true });
-  writeFileSync(path, JSON.stringify(sessions.slice(-100)), { mode: 0o600 });
-  chmodSync(path, 0o600);
+  const lockPath = `${path}.lock`;
+  const token = `${process.pid}:${randomUUID()}`;
+  const deadline = Date.now() + 2000;
+  let locked = false;
+  while (!locked && Date.now() < deadline) {
+    try {
+      writeFileSync(lockPath, token, { flag: "wx", mode: 0o600 });
+      locked = true;
+    } catch {
+      try {
+        const owner = readFileSync(lockPath, "utf8");
+        const pid = Number(owner.split(":", 1)[0]);
+        if (
+          Date.now() - statSync(lockPath).mtimeMs > 30_000 &&
+          !processIsAlive(pid)
+        ) {
+          rmSync(lockPath);
+        }
+      } catch {
+        // Lock disappeared while checking staleness.
+      }
+      if (!locked)
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+    }
+  }
+  if (!locked) return;
+  const tempPath = `${path}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    const current = readSessions().filter(
+      (session) => session.cwd !== input.cwd,
+    );
+    current.push({
+      cwd: input.cwd,
+      commands,
+      ...(target ? { target } : {}),
+      ...(namespace ? { namespace } : {}),
+      ended_at: new Date().toISOString(),
+    });
+    writeFileSync(tempPath, JSON.stringify(current.slice(-100)), {
+      mode: 0o600,
+    });
+    chmodSync(tempPath, 0o600);
+    renameSync(tempPath, path);
+  } finally {
+    rmSync(tempPath, { force: true });
+    try {
+      if (readFileSync(lockPath, "utf8") === token) rmSync(lockPath);
+    } catch {
+      // Lock was already removed or replaced.
+    }
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !(
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ESRCH"
+    );
+  }
 }
 
 export function lastSession(cwd = process.cwd()): SessionRecord | undefined {
