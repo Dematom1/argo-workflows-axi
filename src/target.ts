@@ -1,6 +1,7 @@
 import { flagValue, hasFlag, type ParsedArgs } from "./args.js";
 import { errorMessage } from "./errors.js";
 import { runRead, type TargetArgs } from "./seam.js";
+import { shellQuote } from "./format.js";
 
 /**
  * Where a command lands (design S8). Resolved offline: flags, then ARGO_*
@@ -132,8 +133,8 @@ export function forwardTarget(parsed: ParsedArgs): TargetArgs {
 export function targetSuffix(parsed: ParsedArgs): string {
   const args = targetArgsFrom(parsed);
   const parts: string[] = [];
-  if (args.context) parts.push(`--context ${args.context}`);
-  if (args.server) parts.push(`--argo-server ${args.server}`);
-  if (args.namespace) parts.push(`-n ${args.namespace}`);
+  if (args.context) parts.push(`--context ${shellQuote(args.context)}`);
+  if (args.server) parts.push(`--argo-server ${shellQuote(args.server)}`);
+  if (args.namespace) parts.push(`-n ${shellQuote(args.namespace)}`);
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }

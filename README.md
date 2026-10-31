@@ -24,9 +24,9 @@ running[2]{name,phase,age,progress}:
   stuck-pp1,Pending,20m,""
 cron: 2 cron workflows (1 suspended)
 help[5]:
-  Run `argo-workflows-axi triage` for failing steps, hints and log tails
-  Run `argo-workflows-axi wf get <name>` for one workflow's failed steps
-  Run `argo-workflows-axi cron list` for schedules and last runs
+  Run `argo-workflows-axi triage -n argo` for failing steps, hints and log tails
+  Run `argo-workflows-axi wf get <name> -n argo` for one workflow's failed steps
+  Run `argo-workflows-axi cron list -n argo` for schedules and last runs
   Run `argo-workflows-axi --help` for all commands
   Run `argo-workflows-axi setup hooks` to install the session hooks
 ```
