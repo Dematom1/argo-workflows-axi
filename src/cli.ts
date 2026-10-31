@@ -1,6 +1,6 @@
 import { AxiError, runAxiCli, type AxiCliCommand } from "axi-sdk-js";
 import { axiError } from "./errors.js";
-import { formatError, render } from "./render.js";
+import { formatError, render, renderPresentation } from "./render.js";
 import { REFUSALS } from "./registry.js";
 import { VERSION } from "./version.js";
 import { ctxCommand, ctxView } from "./commands/ctx.js";
@@ -150,17 +150,30 @@ function refused(key: string): AxiError {
 }
 
 function rendered(handler: Handler): AxiCliCommand<undefined> {
-  return async (args) => render(await handler(args));
+  return async (args) => {
+    const output = await handler(args);
+    return typeof output === "string" &&
+      (args.includes("--help") ||
+        (handler === setupCommand && args.length === 0))
+      ? renderPresentation(output)
+      : render(output);
+  };
 }
 
 function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
   return async (args) => {
     const [sub, ...rest] = args;
-    if (sub === undefined || sub === "--help") return render(noun.help);
+    if (sub === undefined || sub === "--help")
+      return renderPresentation(noun.help);
     const handler = Object.hasOwn(noun.subcommands, sub)
       ? noun.subcommands[sub]
       : undefined;
-    if (handler) return render(await handler(rest));
+    if (handler) {
+      const output = await handler(rest);
+      return typeof output === "string" && rest.includes("--help")
+        ? renderPresentation(output)
+        : render(output);
+    }
     if (REFUSALS[`${name} ${sub}`]) throw refused(`${name} ${sub}`);
     throw axiError(`Unknown subcommand: ${name} ${sub}`, "VALIDATION_ERROR", [
       `Valid subcommands: ${Object.keys(noun.subcommands).join(", ")}`,

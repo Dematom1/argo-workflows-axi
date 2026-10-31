@@ -5,6 +5,10 @@ import { AxiError, exitCodeForError } from "axi-sdk-js";
  * TOON rendering with readable, decoder-compatible list-form `help` hints.
  */
 
+export function renderPresentation(text: string): string {
+  return text.replace(/\n+$/, "");
+}
+
 export function renderHelp(lines: string[]): string {
   return lines.length === 0
     ? ""
@@ -12,7 +16,8 @@ export function renderHelp(lines: string[]): string {
 }
 
 export function render(output: Record<string, unknown> | string): string {
-  if (typeof output === "string") return output.replace(/\n+$/, "");
+  if (typeof output === "string")
+    return encode({ output: output.replace(/\n+$/, "") });
   const { help, ...rest } = output;
   const blocks: string[] = [];
   if (Object.keys(rest).length > 0) blocks.push(encode(rest));
