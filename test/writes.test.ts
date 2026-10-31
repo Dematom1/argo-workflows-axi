@@ -45,7 +45,9 @@ describe("write gate", () => {
   it("says so in the preview when the target is not in the allowlist (default: none)", () => {
     const result = run(["wf", "suspend", "ingest-q9w8e"], { responses: READS });
     expect(result.stdout).toContain(
-      "writable: no - this target is not in ~/.config/argo-workflows-axi/config.json",
+      process.platform === "win32"
+        ? `this target is not in ${join(result.home, ".config", "argo-workflows-axi", "config.json")}`
+        : "writable: no - this target is not in ~/.config/argo-workflows-axi/config.json",
     );
     expect(result.stdout).toContain(
       "`run` will be refused until a human adds this target",

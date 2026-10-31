@@ -126,6 +126,7 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
 
   const env: Record<string, string> = {
     PATH: fakeBin,
+    ...(process.env.PATHEXT ? { PATHEXT: process.env.PATHEXT } : {}),
     HOME: home,
     XDG_CONFIG_HOME: configHome,
     KUBECONFIG: join(dir, "no-kubeconfig"),
