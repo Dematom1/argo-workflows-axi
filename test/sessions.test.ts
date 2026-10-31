@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { utimesSync } from "node:fs";
 import {
   chmodSync,
   mkdirSync,
@@ -113,6 +114,37 @@ describe("session memory", () => {
         .map((session: { cwd: string }) => session.cwd)
         .sort(),
     ).toEqual(["/work/one", "/work/two"]);
+  });
+
+  it("reclaims a stale lock owned by a dead process", () => {
+    const root = mkdtempSync(join(tmpdir(), "axi-session-stale-"));
+    process.env.XDG_CONFIG_HOME = root;
+    const transcript = join(root, "transcript.jsonl");
+    writeFileSync(transcript, "");
+    const path = sessionsPath();
+    mkdirSync(join(root, "argo-workflows-axi"));
+    const lock = `${path}.lock`;
+    writeFileSync(lock, "999999999:dead-owner");
+    const old = new Date(Date.now() - 31_000);
+    utimesSync(lock, old, old);
+    recordSession({ transcript_path: transcript, cwd: "/work/reclaimed" });
+    expect(lastSession("/work/reclaimed")).toBeDefined();
+  });
+
+  it("does not reclaim a stale lock held by a live process", () => {
+    const root = mkdtempSync(join(tmpdir(), "axi-session-live-lock-"));
+    process.env.XDG_CONFIG_HOME = root;
+    const transcript = join(root, "transcript.jsonl");
+    writeFileSync(transcript, "");
+    const path = sessionsPath();
+    mkdirSync(join(root, "argo-workflows-axi"));
+    const lock = `${path}.lock`;
+    writeFileSync(lock, `${process.pid}:owner`);
+    const old = new Date(Date.now() - 31_000);
+    utimesSync(lock, old, old);
+    recordSession({ transcript_path: transcript, cwd: "/work/skipped" });
+    expect(readFileSync(lock, "utf8")).toBe(`${process.pid}:owner`);
+    expect(lastSession("/work/skipped")).toBeUndefined();
   });
 
   it("tolerates corrupt session files", () => {

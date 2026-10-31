@@ -4,8 +4,10 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -125,14 +127,27 @@ export function recordSession(payload: unknown): void {
   const path = sessionsPath();
   mkdirSync(join(path, ".."), { recursive: true });
   const lockPath = `${path}.lock`;
+  const token = `${process.pid}:${randomUUID()}`;
   const deadline = Date.now() + 2000;
   let locked = false;
   while (!locked && Date.now() < deadline) {
     try {
-      writeFileSync(lockPath, "", { flag: "wx", mode: 0o600 });
+      writeFileSync(lockPath, token, { flag: "wx", mode: 0o600 });
       locked = true;
     } catch {
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
+      try {
+        const owner = readFileSync(lockPath, "utf8");
+        const pid = Number(owner.split(":", 1)[0]);
+        if (
+          Date.now() - statSync(lockPath).mtimeMs > 30_000 &&
+          !processIsAlive(pid)
+        ) {
+          rmSync(lockPath);
+        }
+      } catch {
+        // Lock disappeared while checking staleness.
+      }
+      if (!locked) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25);
     }
   }
   if (!locked) return;
@@ -155,7 +170,21 @@ export function recordSession(payload: unknown): void {
     renameSync(tempPath, path);
   } finally {
     rmSync(tempPath, { force: true });
-    rmSync(lockPath, { force: true });
+    try {
+      if (readFileSync(lockPath, "utf8") === token) rmSync(lockPath);
+    } catch {
+      // Lock was already removed or replaced.
+    }
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return !(error instanceof Error && "code" in error && error.code === "ESRCH");
   }
 }
 
