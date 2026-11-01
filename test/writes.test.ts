@@ -370,14 +370,20 @@ describe("idempotent resubmit", () => {
       ...workflow,
       metadata: {
         ...workflow.metadata,
-        labels: { ...workflow.metadata.labels, "axi.argoproj.io/resubmit-source": "other-source" },
+        labels: {
+          ...workflow.metadata.labels,
+          "axi.argoproj.io/resubmit-source": "other-source",
+        },
       },
     });
     const nameTaken = run(runArgs([]), {
       responses: [
         ...begin,
         prior,
-        { match: ["get", resultName], stdout: json(unrelated(createdWorkflow())) },
+        {
+          match: ["get", resultName],
+          stdout: json(unrelated(createdWorkflow())),
+        },
       ],
       config: ALLOW,
     });
@@ -423,7 +429,10 @@ describe("idempotent resubmit", () => {
             "Error: rpc error: code = AlreadyExists desc = workflows already exists\\n",
           exit: 1,
         },
-        { match: ["get", resultName], stdout: json(unrelated(createdWorkflow())) },
+        {
+          match: ["get", resultName],
+          stdout: json(unrelated(createdWorkflow())),
+        },
       ],
       config: ALLOW,
     });
@@ -498,10 +507,7 @@ describe("idempotent resubmit", () => {
         ...begin,
         {
           match: ["list"],
-          stdout: json([
-            createdWorkflow("0"),
-            createdWorkflow("not-a-number"),
-          ]),
+          stdout: json([createdWorkflow("0"), createdWorkflow("not-a-number")]),
         },
         {
           match: ["get"],
