@@ -145,6 +145,21 @@ describe("wf list", () => {
     expect(result.stdout).not.toContain("to see all 1001");
   });
 
+  it("includes the workflow namespace in --full guidance with -A", () => {
+    const wf = d.failedEtl();
+    wf.metadata.namespace = "team-a";
+    wf.status!.message = "x".repeat(500);
+    const result = run(["wf", "list", "-A"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["list"], stdout: json([wf]) },
+      ],
+    });
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p -n team-a --full`",
+    );
+  });
+
   it("adds a namespace column with -A and extra --fields columns", () => {
     const result = run(["wf", "list", "-A", "--fields", "duration,cron"], {
       responses: [

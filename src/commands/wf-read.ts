@@ -243,7 +243,7 @@ export async function wfList(args: string[]): Promise<Output> {
   for (const wf of shown) {
     if ((wf.status?.message?.length ?? 0) > 120) {
       help.push(
-        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for the untruncated message`,
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name}${all ? ` -n ${wf.metadata.namespace}` : ""} --full${suffix}\` for the untruncated message`,
       );
     }
   }

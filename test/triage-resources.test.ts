@@ -72,6 +72,26 @@ describe("triage", () => {
     );
   });
 
+  it("includes the workflow namespace in --full guidance with -A", () => {
+    const wf = d.failedEtl();
+    wf.metadata.namespace = "team-a";
+    wf.status!.message = "x".repeat(500);
+    const result = run(["triage", "-A"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["cron", "list"], stdout: "" },
+        {
+          match: ["list", "--output=json", "--all-namespaces"],
+          stdout: json([wf]),
+        },
+        { match: ["logs"], stdout: "" },
+      ],
+    });
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p -n team-a --full`",
+    );
+  });
+
   it("shows full message size and an exact wf get --full command", () => {
     const wf = d.failedEtl();
     wf.status!.message = "x".repeat(500);

@@ -241,14 +241,14 @@ export async function triageCommand(
       ].some((message) => (message?.length ?? 0) > 200)
     ) {
       help.push(
-        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for untruncated workflow and step messages`,
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name}${all ? ` -n ${wf.metadata.namespace}` : ""} --full${suffix}\` for untruncated workflow and step messages`,
       );
     }
   }
   for (const { wf, reason } of stuck) {
     if (reason.length > 200) {
       help.push(
-        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for the untruncated reason`,
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name}${all ? ` -n ${wf.metadata.namespace}` : ""} --full${suffix}\` for the untruncated reason`,
       );
     }
   }
