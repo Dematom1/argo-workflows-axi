@@ -172,12 +172,8 @@ export async function setupCommand(
   const retained = installedGroups.flatMap((group) => {
     if (!Array.isArray(group.hooks)) return [group];
     const hooks = group.hooks as Hook[];
-    const kept = hooks.filter(
-      (hook) => !hook.command?.includes(`# ${MARKER}`),
-    );
-    return kept.length || hooks.length === 0
-      ? [{ ...group, hooks: kept }]
-      : [];
+    const kept = hooks.filter((hook) => !hook.command?.includes(`# ${MARKER}`));
+    return kept.length || hooks.length === 0 ? [{ ...group, hooks: kept }] : [];
   });
   retained.push({
     matcher: "",
