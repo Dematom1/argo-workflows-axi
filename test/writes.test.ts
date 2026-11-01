@@ -472,7 +472,11 @@ describe("idempotent resubmit", () => {
     ]);
     expect(argoCalls(deliberate)[0]).not.toContain("--priority=5");
     expect(argoCalls(deliberate)[0]).not.toContain("--priority");
-    expect(deliberate.calls.find((call) => call.bin === "kubectl" && call.argv[0] === "patch")?.argv).toEqual([
+    expect(
+      deliberate.calls.find(
+        (call) => call.bin === "kubectl" && call.argv[0] === "patch",
+      )?.argv,
+    ).toEqual([
       "patch",
       "workflow",
       resultName,

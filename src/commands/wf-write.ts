@@ -494,12 +494,7 @@ async function applyResubmits(
         const priority = flagValue(parsed, "--priority");
         const { stdout } = await runWrite(
           "wf.resubmit-native",
-          [
-            row.name,
-            "--memoized",
-            ...parameterArgs(parsed),
-            "--output=json",
-          ],
+          [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
           gate.approval!,
           { target: forward },
         );
