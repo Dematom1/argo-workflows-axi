@@ -103,6 +103,16 @@ interface NamedWrite<T> {
   echoArgs: (parsed: ParsedArgs) => string[];
 }
 
+function writeForwardTarget(
+  target: Target,
+  parsed: ParsedArgs,
+): ReturnType<typeof forwardTarget> {
+  if (!target.defaulted) return forwardTarget(parsed);
+  return target.mode === "argo-server"
+    ? { server: target.server, namespace: target.namespace }
+    : { context: target.context, namespace: target.namespace };
+}
+
 function parameterArgs(parsed: ParsedArgs): string[] {
   return flagValues(parsed, "--parameter").map((p) => {
     const eq = p.indexOf("=");
@@ -759,11 +769,7 @@ async function runNamedWrite<T>(
       ? "wf.resubmit-native"
       : spec.op;
   const gate = checkWrite(writeOp, parsed, target, command);
-  const forward = target.defaulted
-    ? target.mode === "argo-server"
-      ? { server: target.server, namespace: target.namespace }
-      : { context: target.context, namespace: target.namespace }
-    : forwardTarget(parsed);
+  const forward = writeForwardTarget(target, parsed);
 
   const rows: Row[] = [];
   for (const name of names) {
@@ -1208,11 +1214,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
   }
   const priority = validatePriority(parsed);
   const target = resolveWriteTarget(await resolveTarget(parsed));
-  const forward = target.defaulted
-    ? target.mode === "argo-server"
-      ? { server: target.server, namespace: target.namespace }
-      : { context: target.context, namespace: target.namespace }
-    : forwardTarget(parsed);
+  const forward = writeForwardTarget(target, parsed);
   const echo: string[] = ["wf", "submit"];
   if (from) echo.push(`--from ${from.kind}/${from.name}`);
   else echo.push(shellQuote(files[0]));
