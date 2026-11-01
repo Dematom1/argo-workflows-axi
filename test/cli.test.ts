@@ -27,15 +27,21 @@ describe("cli basics", () => {
       expect(result.exitCode, name).toBe(0);
       expect(() => decode(result.stdout), name).not.toThrow();
       const subcommands = result.stdout.match(/subcommands\[\d+\]:\n((?:  .+\n)+)/)?.[1];
-      if (!subcommands) continue;
-
-      const names = subcommands.trimEnd().split("\n").map((line) =>
+      const names = subcommands?.trimEnd().split("\n").map((line) =>
         line.trim().split(":", 1)[0].split(/\s+/)[0],
-      );
+      ) ?? [];
       for (const subcommand of names) {
         const help = run([name, subcommand, "--help"]);
         expect(help.exitCode, `${name} ${subcommand}`).toBe(0);
         expect(() => decode(help.stdout), `${name} ${subcommand}`).not.toThrow();
+      }
+
+      const examples = result.stdout.match(/examples\[\d+\]:\n((?:  - .+\n)+)/)?.[1];
+      for (const example of examples?.trimEnd().split("\n") ?? []) {
+        const args = example.trim().slice(2).split(/\s+/).slice(1);
+        const help = run([...args, "--help"]);
+        expect(help.exitCode, args.join(" ")).toBe(0);
+        expect(() => decode(help.stdout), args.join(" ")).not.toThrow();
       }
     }
 
