@@ -104,16 +104,20 @@ describe("write gate", () => {
     expect(writeCalls(result)).toEqual([]);
   });
 
-  it("--apply without an explicit target is a usage error and nothing is sent", () => {
+  it("--apply refuses an ambiguous target and sends nothing", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "--apply"], {
       responses: READS,
-      config: ALLOW,
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { context: "prod", namespace: "argo" },
+        ],
+      },
     });
     expect(result.exitCode).toBe(2);
-    expect(result.stdout).toContain(
-      "--apply needs an explicit target: missing -n/--namespace, --context",
-    );
-    expect(result.stdout).toContain("--context kind-dev -n argo --apply");
+    expect(result.stdout).toContain("2 matching");
+    expect(result.stdout).toContain("kind-dev namespace=argo");
+    expect(result.stdout).toContain("prod namespace=argo");
     expect(argoCalls(result)).toEqual([]);
   });
 
