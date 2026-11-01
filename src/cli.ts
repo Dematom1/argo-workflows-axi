@@ -236,6 +236,13 @@ export function buildCommands(): Record<string, AxiCliCommand<undefined>> {
     triage: rendered(triageCommand),
     ctx: rendered(ctxCommand),
     setup: rendered(setupCommand),
+    update: async (args) => {
+      if (args.includes("--help"))
+        return renderPresentation(
+          "command: argo-workflows-axi update\ndescription: Upgrade argo-workflows-axi\n",
+        );
+      throw axiError("Update is not available from this command", "REFUSED");
+    },
   };
   for (const [name, noun] of Object.entries(NOUNS)) {
     commands[name] = nounHandler(name, noun);
