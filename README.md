@@ -74,7 +74,7 @@ You only need one of these.
 | `wf logs <name\|@latest> [<pod>]`                                         | Bounded logs of the failing step (last 100 lines, 20,000-char cap by default; `--full` raises the cap to 1,000,000)  |
 | `wf wait <name>`                                                          | Bounded wait (default 120s, `--timeout` up to 10m); returns the current state on timeout                             |
 | `wf lint <file...\|->`                                                    | Validate manifests                                                                                                   |
-| `cron list\|get`, `template list\|get\|lint`, `clustertemplate list\|get` | Cron workflows and templates (template `get` shows input parameters with defaults)                                   |
+| `cron list\|get`, `template list\|get\|lint`, `clustertemplate list\|get` | Cron workflows and templates (cron `get --full` shows untruncated condition messages)                                |
 | `archive list\|get`                                                       | Archived workflows (Argo Server mode only)                                                                           |
 | `ctx`                                                                     | Offline target view                                                                                                  |
 | `setup hooks`                                                             | Install session hooks; `setup uninstall` removes them                                                                |
@@ -125,7 +125,7 @@ Values whose key looks sensitive (password, secret, token, api key, credential a
 
 ### Waiting, logs and output size
 
-Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod and a 20,000-character cap; `--full` raises the cap to 1,000,000 characters. Log lines are included in the structured output, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more; long messages are truncated with their total size, and only when something was cut does the output point at `--full` (or, for `archive get`, which has no `--full`, the raw `argo archive get <uid> -o json --argo-server <host:port> -n <namespace>` for a human to run; that raw output is not redacted).
+Nothing streams or follows. `wf wait` is bounded and tells the agent to wait again on timeout. Logs default to the last 100 lines per pod and a 20,000-character cap; `--full` raises the cap to 1,000,000 characters. Log lines are included in the structured output, and the header says exactly what was cut. Lists show 3-4 fields with `--fields` for more. Truncated text includes its total character count and points to the exact command with `--full`; `wf get --full` includes untruncated workflow messages, parameters and failed-node messages, and `cron get --full` includes untruncated condition messages. For `archive get`, which has no `--full`, use the raw `argo archive get <uid> -o json --argo-server <host:port> -n <namespace>` command shown in its help; raw Argo output is not redacted.
 
 ## Modes
 

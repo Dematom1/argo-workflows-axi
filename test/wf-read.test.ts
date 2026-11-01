@@ -183,6 +183,28 @@ describe("wf get", () => {
     expect(full.stdout).toContain("x".repeat(5000));
   });
 
+  it("shows exact full-value guidance for truncated workflow and node messages", () => {
+    const wf = d.failedEtl();
+    wf.status!.message = "m".repeat(900);
+    const node = Object.values(wf.status?.nodes ?? {}).find(
+      (n) => n.type === "Pod" && n.phase === "Failed",
+    );
+    if (!node) throw new Error("fixture lacks failed pod");
+    node.message = "n".repeat(300);
+    const responses = [...KUBE_DEFAULTS, { match: ["get"], stdout: json(wf) }];
+    const preview = run(["wf", "get", "nightly-etl-x7k2p"], { responses });
+    expect(preview.stdout).toContain("truncated, 900 chars total");
+    expect(preview.stdout).toContain("truncated, 300 chars total");
+    expect(preview.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p --full` for untruncated messages",
+    );
+    const full = run(["wf", "get", "nightly-etl-x7k2p", "--full"], {
+      responses,
+    });
+    expect(full.stdout).toContain("m".repeat(900));
+    expect(full.stdout).toContain("n".repeat(300));
+  });
+
   it("shows the summary, only failed nodes with hints, and redacts sensitive parameters", () => {
     const result = run(["wf", "get", "nightly-etl-x7k2p"], {
       responses: [

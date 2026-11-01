@@ -80,6 +80,13 @@ export async function homeView(): Promise<Record<string, unknown>> {
         help.push(
           `Run \`argo-workflows-axi wf get <name> ${suffix}\` for one workflow's failed steps`,
         );
+        for (const wf of failed.slice(0, SHOWN)) {
+          if ((wf.status?.message?.length ?? 0) > 120) {
+            help.push(
+              `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full ${suffix}\` for the untruncated message`,
+            );
+          }
+        }
       }
       if (running.length > 0) {
         out.running = running.slice(0, SHOWN).map((wf) => ({

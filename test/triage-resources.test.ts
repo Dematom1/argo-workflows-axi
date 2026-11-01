@@ -72,6 +72,23 @@ describe("triage", () => {
     );
   });
 
+  it("shows full message size and an exact wf get --full command", () => {
+    const wf = d.failedEtl();
+    wf.status!.message = "x".repeat(500);
+    const result = run(["triage"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["cron", "list"], stdout: "" },
+        { match: ["list", "--output=json"], stdout: json([wf]) },
+        { match: ["logs"], stdout: "" },
+      ],
+    });
+    expect(result.stdout).toContain("truncated, 500 chars total");
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p --full`",
+    );
+  });
+
   it("ignores failures outside the window and says nothing is broken", () => {
     const old = d.failedEtl() as { status: Record<string, unknown> };
     old.status.finishedAt = d.ago(3 * 86400);
@@ -153,6 +170,26 @@ describe("cron and template reads", () => {
     expect(result.stdout).toContain("timezone: Europe/Budapest");
     expect(result.stdout).toContain("concurrency: Forbid");
     expect(result.stdout).toContain("parameters[1]{name,default,enum}:");
+  });
+
+  it("truncates cron condition messages with a --full route", () => {
+    const cron = d.cron("nightly-etl", false) as {
+      status: { conditions: Array<Record<string, unknown>> };
+    };
+    cron.status.conditions = [
+      { type: "Ready", status: "True", message: "x".repeat(500) },
+    ];
+    const responses = [
+      ...KUBE_DEFAULTS,
+      { match: ["cron", "get", "nightly-etl"], stdout: json(cron) },
+    ];
+    const preview = run(["cron", "get", "nightly-etl"], { responses });
+    expect(preview.stdout).toContain("truncated, 500 chars total");
+    expect(preview.stdout).toContain(
+      "Run `argo-workflows-axi cron get nightly-etl --full`",
+    );
+    const full = run(["cron", "get", "nightly-etl", "--full"], { responses });
+    expect(full.stdout).toContain("x".repeat(500));
   });
 
   it("template get shows entrypoint and parameters with defaults, redacting secrets", () => {

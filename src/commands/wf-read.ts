@@ -240,6 +240,13 @@ export async function wfList(args: string[]): Promise<Output> {
   const help = [
     `Run \`argo-workflows-axi wf get <name>${all ? `${suffix} -n <namespace>` : suffix}\` for phase, parameters and failed steps`,
   ];
+  for (const wf of shown) {
+    if ((wf.status?.message?.length ?? 0) > 120) {
+      help.push(
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for the untruncated message`,
+      );
+    }
+  }
   if (workflows.length > shown.length) {
     const filters = [
       ["--status", status],

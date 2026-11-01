@@ -233,6 +233,25 @@ export async function triageCommand(
   }
 
   const help: string[] = [];
+  for (const wf of failed.slice(0, DETAILED)) {
+    if (
+      [
+        wf.status?.message,
+        ...failedLeafNodes(wf).map((node) => node.message),
+      ].some((message) => (message?.length ?? 0) > 200)
+    ) {
+      help.push(
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for untruncated workflow and step messages`,
+      );
+    }
+  }
+  for (const { wf, reason } of stuck) {
+    if (reason.length > 200) {
+      help.push(
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name} --full${suffix}\` for the untruncated reason`,
+      );
+    }
+  }
   if (failed.length > 0) {
     help.push(
       `Run \`argo-workflows-axi wf logs <workflow>${suffix}\` for more of the failing step's log`,
