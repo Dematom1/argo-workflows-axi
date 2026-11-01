@@ -510,7 +510,13 @@ async function applyResubmits(
         );
         const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
         const name = resubmitted?.metadata.name ?? "(unknown)";
-        if (priority !== undefined && resubmitted?.metadata.name) {
+        if (priority !== undefined && !resubmitted?.metadata.name) {
+          throw axiError(
+            `Native memoized resubmit likely created a workflow, but its name is unknown; priority ${priority} was not applied. Remedy: kubectl get workflows --context=${target.context} -n ${target.namespace} -l workflows.argoproj.io/resubmitted-from-workflow=${row.name}, then kubectl patch workflow <created-name> --context=${target.context} -n ${target.namespace} --type=merge --patch='{"spec":{"priority":${Number(priority)}}}'.`,
+            "UNKNOWN",
+          );
+        }
+        if (priority !== undefined) {
           try {
             await runWrite(
               "wf.priority-patch",

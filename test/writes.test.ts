@@ -521,6 +521,27 @@ describe("idempotent resubmit", () => {
     }
   });
 
+  it("fails with recovery steps when native resubmit omits the created name", () => {
+    const result = run(runArgs(["--memoized", "--new", "--priority", "5"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json({ metadata: {} }) },
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("priority 5 was not applied");
+    expect(result.stdout).toContain(
+      "kubectl get workflows --context=kind-dev -n argo -l workflows.argoproj.io/resubmitted-from-workflow=nightly-etl-x7k2p",
+    );
+    expect(result.stdout).toContain(
+      `kubectl patch workflow <created-name> --context=kind-dev -n argo --type=merge --patch='{"spec":{"priority":5}}'`,
+    );
+    expect(result.stdout).not.toContain("undefined");
+    expect(argoCalls(result)).toHaveLength(1);
+    expect(result.calls.some((call) => call.bin === "kubectl")).toBe(false);
+  });
+
   it("reports an actionable remedy when the memoized priority patch fails", () => {
     const result = run(runArgs(["--memoized", "--new", "--priority", "5"]), {
       responses: [
