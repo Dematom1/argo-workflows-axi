@@ -428,7 +428,7 @@ describe("setup hooks", () => {
     ).toBe(original);
   });
 
-  it("preserves unrelated SessionEnd groups and existing file mode", async () => {
+  it("preserves unrelated SessionEnd groups through install and uninstall", async () => {
     const { readFileSync, statSync } = await import("node:fs");
     const { join } = await import("node:path");
     const result = run(["setup", "hooks"], {
@@ -441,6 +441,17 @@ describe("setup hooks", () => {
     const settings = JSON.parse(readFileSync(file, "utf8"));
     expect(settings.hooks.SessionEnd[0]).toEqual({ matcher: "keep-me" });
     expect(statSync(file).mode & 0o777).toBe(0o644);
+
+    const uninstalled = run(["setup", "uninstall"], {
+      claudeSettings: JSON.stringify({
+        hooks: { SessionEnd: [{ matcher: "keep-me" }] },
+      }),
+    });
+    expect(uninstalled.exitCode).toBe(0);
+    const afterUninstall = JSON.parse(
+      readFileSync(join(uninstalled.home, ".claude", "settings.json"), "utf8"),
+    );
+    expect(afterUninstall.hooks.SessionEnd).toEqual([{ matcher: "keep-me" }]);
   });
 
   it("installs user-scope hooks only: --project and --status are not flags", () => {

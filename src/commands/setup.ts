@@ -164,8 +164,9 @@ export async function setupCommand(
     onError: (message) => errors.push(message),
   });
   const installedSettings = readSettings(settingsPath);
+  const installedGroups = validateSessionEnd(installedSettings);
   installedSettings.hooks ??= {};
-  const retained = groups.flatMap((group) => {
+  const retained = installedGroups.flatMap((group) => {
     if (!Array.isArray(group.hooks)) return [group];
     const kept = (group.hooks as Hook[]).filter(
       (hook) => !hook.command?.includes(`# ${MARKER}`),
