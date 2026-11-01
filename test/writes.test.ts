@@ -94,7 +94,7 @@ describe("write gate", () => {
   });
 
   it("says so in the preview when the target is not in the allowlist (default: none)", () => {
-    const result = run(["wf", "suspend", "ingest-q9w8e"], { responses: READS });
+    const result = run(["wf", "suspend", "ingest-q9w8e", ...EXPLICIT], { responses: READS });
     expect(result.stdout).toContain(
       "writable: no - this target is not in ~/.config/argo-workflows-axi/config.json",
     );
@@ -258,6 +258,7 @@ describe("write gate", () => {
   it("rejects -A on writes, even for a preview", () => {
     const result = run(["wf", "retry", "nightly-etl-x7k2p", "-A"], {
       responses: READS,
+      config: ALLOW,
     });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("Writes never accept -A/--all-namespaces");
@@ -721,6 +722,7 @@ describe("idempotent no-ops (S15)", () => {
         ...KUBE_DEFAULTS,
         { match: ["get"], stdout: json(d.runningIngest({ suspend: true })) },
       ],
+      config: ALLOW,
     });
     expect(suspended.stdout).toContain("no-op (already_suspended)");
     const stopping = run(["wf", "stop", "ingest-q9w8e"], {
@@ -728,6 +730,7 @@ describe("idempotent no-ops (S15)", () => {
         ...KUBE_DEFAULTS,
         { match: ["get"], stdout: json(d.runningIngest({ shutdown: "Stop" })) },
       ],
+      config: ALLOW,
     });
     expect(stopping.stdout).toContain("no-op (already_shutting_down (Stop))");
   });
@@ -789,6 +792,7 @@ describe("cron suspend/resume", () => {
   it("previews and reports idempotent no-ops", () => {
     const result = run(["cron", "suspend", "nightly-etl", "weekly-cleanup"], {
       responses: CRON_READS,
+      config: ALLOW,
     });
     expect(result.stdout).toContain("cron_workflows[2]{name,phase,change}:");
     expect(result.stdout).toContain("nightly-etl,active,suspend schedule");
@@ -868,6 +872,7 @@ describe("wf submit", () => {
       ],
       {
         responses: TEMPLATE_READS,
+        config: ALLOW,
       },
     );
     expect(result.exitCode).toBe(0);
@@ -967,6 +972,7 @@ describe("wf submit", () => {
         ...KUBE_DEFAULTS,
         { match: ["lint"], stdout: "no linting errors found!\n" },
       ],
+      config: ALLOW,
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("source: manifest");
@@ -983,7 +989,7 @@ describe("wf submit", () => {
     const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
     const file = join(dir, "tmpl.yaml");
     writeFileSync(file, "kind: WorkflowTemplate\nmetadata:\n  name: x\n");
-    const wrongKind = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
+    const wrongKind = run(["wf", "submit", file], { responses: KUBE_DEFAULTS, config: ALLOW });
     expect(wrongKind.exitCode).toBe(2);
     expect(wrongKind.stdout).toContain("Expected kind Workflow");
     const both = run(["wf", "submit", file, "--from", "workflowtemplate/x"]);
@@ -1000,7 +1006,7 @@ describe("wf submit", () => {
   it("accepts argo's own spellings of the --from kinds", () => {
     const result = run(
       ["wf", "submit", "--from", "wftmpl/nightly-etl", "-p", "date=x"],
-      { responses: TEMPLATE_READS },
+      { responses: TEMPLATE_READS, config: ALLOW },
     );
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("source: workflowtemplate/nightly-etl");
@@ -1086,7 +1092,7 @@ describe("wf submit", () => {
       "dup.yaml",
       "kind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\n  namespace: prod\n",
     );
-    const result = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
+    const result = run(["wf", "submit", file], { responses: KUBE_DEFAULTS, config: ALLOW });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("not valid YAML");
     expect(argoCalls(result)).toEqual([]);
