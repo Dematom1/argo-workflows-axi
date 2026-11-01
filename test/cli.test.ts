@@ -1,6 +1,7 @@
 import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import { buildCommands } from "../src/cli.js";
+import { REFUSALS } from "../src/registry.js";
 import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
 
 describe("cli basics", () => {
@@ -18,8 +19,7 @@ describe("cli basics", () => {
     expect(topLevel.exitCode).toBe(0);
     expect(() => decode(topLevel.stdout)).not.toThrow();
 
-    const registeredCommands = Object.keys(buildCommands());
-    expect(registeredCommands).not.toContain("update"); // update is provided by axi-sdk-js
+    const registeredCommands = [...Object.keys(buildCommands()), "update"];
     expect(registeredCommands).toContain("context");
     for (const name of registeredCommands) {
       const result = run([name, "--help"]);
@@ -45,19 +45,16 @@ describe("cli basics", () => {
         ).not.toThrow();
       }
 
-      const examples = result.stdout.match(
-        /examples\[\d+\]:\n((?: {2}- .+\n)+)/,
-      )?.[1];
-      for (const example of examples?.trimEnd().split("\n") ?? []) {
-        if (example.includes("|")) continue;
-        const args = example.trim().slice(2).split(/\s+/).slice(1);
-        const help = run([...args, "--help"]);
-        expect(help.exitCode, args.join(" ")).toBe(0);
-        expect(() => decode(help.stdout), args.join(" ")).not.toThrow();
-      }
     }
 
-    expect(() => decode("examples[1]:\n  malformed")).toThrow();
+    for (const refusal of Object.keys(REFUSALS)) {
+      const help = run([...refusal.split(" "), "--help"]);
+      expect(help.exitCode, refusal).toBe(0);
+      expect(() => decode(help.stdout), refusal).not.toThrow();
+    }
+
+    const brokenHelp = "commands[not-a-count]:\n  - invalid: help\n";
+    expect(() => decode(brokenHelp)).toThrow();
   });
 
   it("prints top-level help with commands and flags", () => {
