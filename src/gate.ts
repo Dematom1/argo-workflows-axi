@@ -65,9 +65,9 @@ export function resolveWriteTarget(target: Target): Target {
   const chosen = targets[0];
   if (envServer() && !chosen.server) {
     throw axiError(
-      "Cannot default to a Kubernetes target while ARGO_SERVER is set",
+      `Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=${envServer()} conflicts with context=${chosen.context} namespace=${chosen.namespace}`,
       "VALIDATION_ERROR",
-      ["Pass --argo-server to target Argo Server explicitly"],
+      ["Unset ARGO_SERVER to use the Kubernetes target"],
     );
   }
   return {
@@ -75,7 +75,10 @@ export function resolveWriteTarget(target: Target): Target {
     mode: chosen.server ? "argo-server" : "kubernetes",
     server: chosen.server,
     context: chosen.context,
-    namespace: chosen.namespace === "*" ? target.namespace : chosen.namespace,
+    namespace:
+      target.explicit.namespace || chosen.namespace === "*"
+        ? target.namespace
+        : chosen.namespace,
     namespaceSource: target.explicit.namespace
       ? target.namespaceSource
       : "default",
