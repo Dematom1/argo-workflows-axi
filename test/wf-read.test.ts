@@ -150,10 +150,7 @@ describe("wf list", () => {
     wf.metadata.namespace = "team-a";
     wf.status!.message = "x".repeat(500);
     const result = run(["wf", "list", "-A"], {
-      responses: [
-        ...KUBE_DEFAULTS,
-        { match: ["list"], stdout: json([wf]) },
-      ],
+      responses: [...KUBE_DEFAULTS, { match: ["list"], stdout: json([wf]) }],
     });
     expect(result.stdout).toContain(
       "Run `argo-workflows-axi wf get nightly-etl-x7k2p -n team-a --full`",
