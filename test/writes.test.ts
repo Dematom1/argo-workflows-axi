@@ -449,13 +449,17 @@ describe("idempotent resubmit", () => {
     expect(unsafe.stdout).toContain("--memoized requires --new");
     expect(argoCalls(unsafe)).toEqual([]);
 
-    const deliberate = run(runArgs(["--memoized", "--new"]), {
-      responses: [
-        ...begin,
-        { match: ["resubmit"], stdout: json(createdWorkflow()) },
-      ],
-      config: ALLOW,
-    });
+    const deliberate = run(
+      runArgs(["--memoized", "--new", "--priority", "5"]),
+      {
+        responses: [
+          ...begin,
+          { match: ["resubmit"], stdout: json(createdWorkflow()) },
+          { bin: "kubectl", match: ["patch", "workflow"], stdout: "" },
+        ],
+        config: ALLOW,
+      },
+    );
     expect(deliberate.exitCode).toBe(0);
     expect(writeCalls(deliberate)[0]).toEqual([
       "resubmit",
@@ -466,7 +470,115 @@ describe("idempotent resubmit", () => {
       "--namespace=argo",
       "--loglevel=error",
     ]);
+    expect(argoCalls(deliberate)[0]).not.toContain("--priority=5");
+    expect(argoCalls(deliberate)[0]).not.toContain("--priority");
+    expect(
+      deliberate.calls.find(
+        (call) => call.bin === "kubectl" && call.argv[0] === "patch",
+      )?.argv,
+    ).toEqual([
+      "patch",
+      "workflow",
+      resultName,
+      "--type=merge",
+      '--patch={"spec":{"priority":5}}',
+      "--context=kind-dev",
+      "--namespace=argo",
+    ]);
     expect(deliberate.stdout).toContain("memoized; not retry-safe");
+  });
+
+  it("rejects memoized priority in Argo Server mode before writes", () => {
+    for (const apply of [false, true]) {
+      const result = run(
+        [
+          "wf",
+          "resubmit",
+          "nightly-etl-x7k2p",
+          "--memoized",
+          "--new",
+          "--priority",
+          "5",
+          "--argo-server",
+          "argo.example.internal:2746",
+          "-n",
+          "argo",
+          ...(apply ? ["--apply"] : []),
+        ],
+        {
+          responses: begin,
+          config: {
+            writableTargets: [
+              { server: "argo.example.internal:2746", namespace: "argo" },
+            ],
+          },
+        },
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain("VALIDATION_ERROR");
+      expect(result.stdout).toContain("Kubernetes mode");
+      expect(writeCalls(result)).toEqual([]);
+    }
+  });
+
+  it("fails with recovery steps when native resubmit omits the created name", () => {
+    const result = run(runArgs(["--memoized", "--new", "--priority", "5"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json({ metadata: {} }) },
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain("priority 5 was not applied");
+    expect(result.stdout).toContain(
+      "kubectl get workflows --context=kind-dev -n argo -l workflows.argoproj.io/resubmitted-from-workflow=nightly-etl-x7k2p",
+    );
+    expect(result.stdout).toContain(
+      "kubectl patch workflow <created-name> --context=kind-dev -n argo --type=merge --patch=",
+    );
+    expect(result.stdout).toContain("priority");
+    expect(result.stdout).toContain(":5");
+    expect(result.stdout).not.toContain("undefined");
+    expect(argoCalls(result)).toHaveLength(3);
+    expect(result.calls.some((call) => call.bin === "kubectl")).toBe(false);
+  });
+
+  it("reports an actionable remedy when the memoized priority patch fails", () => {
+    const result = run(runArgs(["--memoized", "--new", "--priority", "5"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json(createdWorkflow()) },
+        {
+          bin: "kubectl",
+          match: ["patch", "workflow"],
+          stderr: "patch rejected",
+          exit: 1,
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain(resultName);
+    expect(result.stdout).toContain("priority 5 was not applied");
+    expect(result.stdout).toContain(
+      `Remedy: kubectl --context=kind-dev -n argo patch workflow ${resultName} --type=merge`,
+    );
+    expect(result.stdout).not.toContain("undefined");
+  });
+
+  it("rejects priorities outside Argo's int32 range before writes", () => {
+    for (const priority of ["2147483648", "-2147483649", "1e2"]) {
+      for (const memoized of [[], ["--memoized", "--new"]]) {
+        const result = run(runArgs([...memoized, "--priority", priority]), {
+          responses: begin,
+          config: ALLOW,
+        });
+        expect(result.exitCode, priority).toBe(2);
+        expect(result.stdout, priority).toContain("VALIDATION_ERROR");
+        expect(writeCalls(result), priority).toEqual([]);
+      }
+    }
   });
 
   it("uses --key and --new to choose deterministic generations", () => {
@@ -507,7 +619,14 @@ describe("idempotent resubmit", () => {
         ...begin,
         {
           match: ["list"],
-          stdout: json([createdWorkflow("0"), createdWorkflow("not-a-number")]),
+          stdout: json([
+            createdWorkflow("0"),
+            createdWorkflow("not-a-number"),
+            createdWorkflow(""),
+            createdWorkflow("1e3"),
+            createdWorkflow("0x10"),
+            createdWorkflow("9007199254740992"),
+          ]),
         },
         {
           match: ["get"],
@@ -659,6 +778,27 @@ describe("wf submit", () => {
       exit: 1,
     },
   ];
+
+  it("rejects a --priority outside Argo's int32 range before writes", () => {
+    const result = run(
+      [
+        "wf",
+        "submit",
+        "--from",
+        "workflowtemplate/nightly-etl",
+        "--name",
+        "etl-1028",
+        "--priority",
+        "2147483648",
+        ...EXPLICIT,
+        "--apply",
+      ],
+      { responses: TEMPLATE_READS, config: ALLOW },
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("VALIDATION_ERROR");
+    expect(writeCalls(result)).toEqual([]);
+  });
 
   it("previews --from with merged parameters (redacted) and blocks on missing required ones", () => {
     const result = run(

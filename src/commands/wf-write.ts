@@ -384,13 +384,9 @@ export const WRITES: Record<
           "VALIDATION_ERROR",
         );
       }
-      const priority = flagValue(parsed, "--priority");
-      if (priority !== undefined && !/^-?\d+$/.test(priority)) {
-        throw axiError("--priority must be a whole number", "VALIDATION_ERROR");
-      }
+      validatePriority(parsed);
       return [
         ...(hasFlag(parsed, "--memoized") ? ["--memoized"] : []),
-        ...(priority !== undefined ? [`--priority=${priority}`] : []),
         ...parameterArgs(parsed),
       ];
     },
@@ -461,6 +457,19 @@ interface Row {
   plan: Plan;
 }
 
+/** Argo's spec.priority is a signed int32; reject anything else before any write. */
+function validatePriority(parsed: ParsedArgs): string | undefined {
+  const priority = flagValue(parsed, "--priority");
+  if (priority === undefined) return undefined;
+  const value = Number(priority);
+  if (!/^-?\d+$/.test(priority) || value < -(2 ** 31) || value > 2 ** 31 - 1)
+    throw axiError(
+      "--priority must be a whole number between -2147483648 and 2147483647",
+      "VALIDATION_ERROR",
+    );
+  return priority;
+}
+
 const RESUBMIT_SOURCE_LABEL = "axi.argoproj.io/resubmit-source";
 const RESUBMIT_KEY_LABEL = "axi.argoproj.io/resubmit-key";
 const RESUBMIT_GENERATION_LABEL = "axi.argoproj.io/resubmit-generation";
@@ -492,6 +501,7 @@ async function applyResubmits(
     try {
       const source = await fetchWorkflow(row.name, forward);
       if (hasFlag(parsed, "--memoized")) {
+        const priority = flagValue(parsed, "--priority");
         const { stdout } = await runWrite(
           "wf.resubmit-native",
           [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
@@ -499,7 +509,36 @@ async function applyResubmits(
           { target: forward },
         );
         const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
-        const name = resubmitted?.metadata.name ?? "(unknown)";
+        const createdName = resubmitted?.metadata.name;
+        const name = createdName ?? "(unknown)";
+        if (priority !== undefined && !createdName) {
+          throw axiError(
+            `Native memoized resubmit likely created a workflow, but its name is unknown; priority ${priority} was not applied. Remedy: kubectl get workflows --context=${target.context} -n ${target.namespace} -l workflows.argoproj.io/resubmitted-from-workflow=${row.name}, then kubectl patch workflow <created-name> --context=${target.context} -n ${target.namespace} --type=merge --patch='{"spec":{"priority":${Number(priority)}}}'.`,
+            "UNKNOWN",
+          );
+        }
+        if (priority !== undefined) {
+          const workflowName = createdName;
+          if (!workflowName)
+            throw new Error("Priority patch requires a created workflow name");
+          try {
+            await runWrite(
+              "wf.priority-patch",
+              [
+                workflowName,
+                `--type=merge`,
+                `--patch={"spec":{"priority":${Number(priority)}}}`,
+              ],
+              gate.approval!,
+              { target: forward },
+            );
+          } catch (error) {
+            throw axiError(
+              `Created workflow ${name}, but priority ${priority} was not applied: ${errorMessage(error)}. Remedy: kubectl --context=${target.context} -n ${target.namespace} patch workflow ${name} --type=merge --patch='{"spec":{"priority":${Number(priority)}}}'`,
+              "UNKNOWN",
+            );
+          }
+        }
         results.push({
           name,
           result: `created ${name} (memoized; not retry-safe)`,
@@ -521,10 +560,10 @@ async function applyResubmits(
         : [];
       const generation = hasFlag(parsed, "--new")
         ? prior.reduce((max, wf) => {
-            const generation = Number(
-              wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL],
-            );
-            return Number.isSafeInteger(generation) && generation >= 0
+            const label = wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL];
+            if (label === undefined || !/^\d+$/.test(label)) return max;
+            const generation = Number(label);
+            return Number.isSafeInteger(generation)
               ? Math.max(max, generation)
               : max;
           }, -1) + 1
@@ -692,6 +731,17 @@ async function runNamedWrite<T>(
   const argoArgs = spec.argoArgs(parsed);
 
   const target = await resolveTarget(parsed);
+  if (
+    spec.op === "wf.resubmit" &&
+    hasFlag(parsed, "--memoized") &&
+    flagValue(parsed, "--priority") !== undefined &&
+    target.mode === "argo-server"
+  ) {
+    throw axiError(
+      "--memoized with --priority requires Kubernetes mode for the post-create kubectl patch; drop --priority or use --context",
+      "VALIDATION_ERROR",
+    );
+  }
   const command = [
     spec.noun,
     spec.verb,
@@ -1145,10 +1195,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
       "VALIDATION_ERROR",
     );
   }
-  const priority = flagValue(parsed, "--priority");
-  if (priority !== undefined && !/^-?\d+$/.test(priority)) {
-    throw axiError("--priority must be a whole number", "VALIDATION_ERROR");
-  }
+  const priority = validatePriority(parsed);
   const target = await resolveTarget(parsed);
   const forward = forwardTarget(parsed);
   const echo: string[] = ["wf", "submit"];

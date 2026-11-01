@@ -205,6 +205,7 @@ describe("read-only by construction (S5)", () => {
     expect(writes).toEqual([
       "cron.resume",
       "cron.suspend",
+      "wf.priority-patch",
       "wf.resubmit",
       "wf.resubmit-native",
       "wf.resume",

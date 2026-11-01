@@ -197,6 +197,13 @@ export const OPERATIONS = {
     flags: ["--memoized", "--parameter", "--priority", "--output"],
     targeted: true,
   },
+  "wf.priority-patch": {
+    bin: "kubectl",
+    command: ["patch", "workflow"],
+    tier: "write",
+    flags: ["--type", "--patch"],
+    targeted: true,
+  },
   "wf.stop": {
     bin: "argo",
     command: ["stop"],
