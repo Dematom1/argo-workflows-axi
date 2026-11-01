@@ -20,21 +20,26 @@ export const APPLY_FLAG = "--apply";
 /** Resolve an omitted write target only when the allowlist has one match. */
 export function resolveWriteTarget(target: Target): Target {
   if (
-    target.mode !== "kubernetes" ||
-    (target.explicit.context && target.explicit.namespace)
+    target.explicit.namespace &&
+    (target.explicit.context || target.explicit.server)
   )
     return target;
   const targets = loadConfig().writableTargets.filter(
     (entry) =>
-      entry.context !== undefined &&
-      (target.explicit.context ? entry.context === target.context : true) &&
+      (target.explicit.context
+        ? entry.context === target.context
+        : target.explicit.server
+          ? entry.server === target.server
+          : true) &&
       (target.explicit.namespace
         ? entry.namespace === "*" || entry.namespace === target.namespace
         : true),
   );
   if (targets.length !== 1) {
     const list = targets.length
-      ? targets.map((t) => `  ${t.context} namespace=${t.namespace}`).join("\n")
+      ? targets
+          .map((t) => `  ${t.context ? `context=${t.context}` : `server=${t.server}`} namespace=${t.namespace}`)
+          .join("\n")
       : "  (none)";
     throw axiError(
       `Cannot determine a writable target (${targets.length} matching):\n${list}`,
@@ -45,6 +50,8 @@ export function resolveWriteTarget(target: Target): Target {
   const chosen = targets[0];
   return {
     ...target,
+    mode: chosen.server ? "argo-server" : "kubernetes",
+    server: chosen.server,
     context: chosen.context,
     namespace: chosen.namespace === "*" ? target.namespace : chosen.namespace,
     namespaceSource: target.explicit.namespace
@@ -120,7 +127,7 @@ export function checkWrite(
   if (!target.explicit.namespace && !target.defaulted)
     missing.push("-n/--namespace");
   if (target.mode === "argo-server") {
-    if (!target.explicit.server) {
+    if (!target.explicit.server && !target.defaulted) {
       missing.push(
         envServer()
           ? "--argo-server (ARGO_SERVER is set, so argo talks to that server)"

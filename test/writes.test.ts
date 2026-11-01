@@ -51,6 +51,29 @@ describe("write gate", () => {
     expect(none.stdout).toContain("--context <context>");
   });
 
+  it("defaults server-only targets and refuses mixed target ambiguity", () => {
+    const server = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: READS,
+      config: { writableTargets: [{ server: "localhost:2746", namespace: "argo" }] },
+      env: { ARGO_SERVER: "localhost:2746" },
+    });
+    expect(server.stdout).toContain("server: localhost:2746");
+    expect(server.stdout).toContain("defaulted: true");
+    expect(server.stdout).toContain("--argo-server localhost:2746 -n argo --apply");
+
+    const mixed = run(["wf", "stop", "ingest-q9w8e"], {
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { server: "localhost:2746", namespace: "argo" },
+        ],
+      },
+    });
+    expect(mixed.stdout).toContain("2 matching");
+    expect(mixed.stdout).toContain("context=kind-dev namespace=argo");
+    expect(mixed.stdout).toContain("server=localhost:2746 namespace=argo");
+  });
+
   it("previews by default: no write reaches argo and the exact run command is printed", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "report-zz1"], {
       responses: READS,

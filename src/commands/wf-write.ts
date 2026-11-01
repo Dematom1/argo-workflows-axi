@@ -759,7 +759,9 @@ async function runNamedWrite<T>(
       : spec.op;
   const gate = checkWrite(writeOp, parsed, target, command);
   const forward = target.defaulted
-    ? { context: target.context, namespace: target.namespace }
+    ? target.mode === "argo-server"
+      ? { server: target.server, namespace: target.namespace }
+      : { context: target.context, namespace: target.namespace }
     : forwardTarget(parsed);
 
   const rows: Row[] = [];
@@ -1209,7 +1211,9 @@ export async function wfSubmit(args: string[]): Promise<Output> {
   const priority = validatePriority(parsed);
   const target = resolveWriteTarget(await resolveTarget(parsed));
   const forward = target.defaulted
-    ? { context: target.context, namespace: target.namespace }
+    ? target.mode === "argo-server"
+      ? { server: target.server, namespace: target.namespace }
+      : { context: target.context, namespace: target.namespace }
     : forwardTarget(parsed);
   const echo: string[] = ["wf", "submit"];
   if (from) echo.push(`--from ${from.kind}/${from.name}`);
