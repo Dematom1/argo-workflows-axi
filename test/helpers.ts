@@ -43,6 +43,13 @@ export interface RunOptions {
   stdin?: string;
   /** Contents of ~/.config/argo-workflows-axi/config.json (object is JSON-encoded). */
   config?: unknown;
+  /** Reuse a prior run's HOME. */
+  home?: string;
+  /** Initial Claude settings file contents and mode. */
+  claudeSettings?: string;
+  claudeSettingsMode?: number;
+  claudeSettingsSymlink?: boolean;
+  umask?: number;
   /** Omit the fake kubectl (simulates kubectl missing). */
   noKubectl?: boolean;
   bin?: string;
@@ -96,8 +103,8 @@ function fakeBinDir(noKubectl: boolean): string {
 export function run(args: string[], options: RunOptions = {}): RunResult {
   const dir = mkdtempSync(join(tmpdir(), "awf-axi-test-"));
   const fakeBin = fakeBinDir(options.noKubectl ?? false);
-  const home = join(dir, "home");
-  mkdirSync(home);
+  const home = options.home ?? join(dir, "home");
+  mkdirSync(home, { recursive: true });
 
   const configHome = join(home, ".config");
   if (options.config !== undefined) {
@@ -108,6 +115,21 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
         ? options.config
         : JSON.stringify(options.config),
     );
+  }
+  if (options.claudeSettings !== undefined) {
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    const settingsPath = join(home, ".claude", "settings.json");
+    const targetPath = join(home, ".claude", "settings-target.json");
+    writeFileSync(
+      options.claudeSettingsSymlink ? targetPath : settingsPath,
+      options.claudeSettings,
+    );
+    if (options.claudeSettingsMode !== undefined)
+      chmodSync(
+        options.claudeSettingsSymlink ? targetPath : settingsPath,
+        options.claudeSettingsMode,
+      );
+    if (options.claudeSettingsSymlink) symlinkSync(targetPath, settingsPath);
   }
   const scenario = join(dir, "scenario.json");
   writeFileSync(
@@ -131,6 +153,7 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
     input: options.stdin ?? "",
     encoding: "utf-8",
     timeout: 30_000,
+    ...(options.umask === undefined ? {} : { umask: options.umask }),
   });
   const calls = existsSync(log)
     ? readFileSync(log, "utf-8")

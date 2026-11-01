@@ -414,6 +414,66 @@ describe("setup hooks", () => {
     expect(settings).toContain("argo-workflows-axi-ctx.js");
     expect(settings).toContain("SessionStart");
     expect(first.calls).toEqual([]);
+
+    const second = run(["setup", "hooks"], { home: first.home });
+    expect(second.exitCode).toBe(0);
+    expect(
+      readFileSync(join(second.home, ".claude", "settings.json"), "utf-8"),
+    ).toBe(settings);
+  });
+
+  it("rejects malformed hooks without changing settings", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    for (const original of [
+      '{"hooks":"oops"}\n',
+      '{"hooks":{"SessionEnd":[{"hooks":[null]}]}}\n',
+      '{"hooks":{"SessionEnd":[{"hooks":[{"command":1}]}]}}\n',
+    ]) {
+      const result = run(["setup", "hooks"], { claudeSettings: original });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain("code: VALIDATION_ERROR");
+      expect(
+        readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
+      ).toBe(original);
+    }
+  });
+
+  it("preserves unrelated SessionEnd groups through install and uninstall", async () => {
+    const { readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const result = run(["setup", "hooks"], {
+      claudeSettings: JSON.stringify({
+        hooks: { SessionEnd: [{ matcher: "keep-me" }] },
+      }),
+      claudeSettingsMode: 0o644,
+      umask: 0o077,
+    });
+    const file = join(result.home, ".claude", "settings.json");
+    const settings = JSON.parse(readFileSync(file, "utf8"));
+    expect(settings.hooks.SessionEnd[0]).toEqual({ matcher: "keep-me" });
+    expect(statSync(file).mode & 0o777).toBe(0o644);
+
+    const uninstalled = run(["setup", "uninstall"], { home: result.home });
+    expect(uninstalled.exitCode).toBe(0);
+    const afterUninstall = JSON.parse(
+      readFileSync(join(uninstalled.home, ".claude", "settings.json"), "utf8"),
+    );
+    expect(afterUninstall.hooks.SessionEnd).toEqual([{ matcher: "keep-me" }]);
+  });
+
+  it("preserves settings symlinks while atomically replacing their target", async () => {
+    const { lstatSync, readFileSync, realpathSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const result = run(["setup", "hooks"], {
+      claudeSettings: JSON.stringify({ hooks: { SessionEnd: [] } }),
+      claudeSettingsSymlink: true,
+    });
+    const link = join(result.home, ".claude", "settings.json");
+    expect(lstatSync(link).isSymbolicLink()).toBe(true);
+    expect(
+      JSON.parse(readFileSync(realpathSync(link), "utf8")).hooks.SessionEnd,
+    ).toHaveLength(1);
   });
 
   it("installs user-scope hooks only: --project and --status are not flags", () => {
