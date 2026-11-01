@@ -344,13 +344,13 @@ export const WRITES: Record<
       [
         "  --key <key>: Idempotency key; retries with the same key reuse the workflow",
         "  --new: Create the next resubmit generation",
-        "  --memoized: Re-use successful steps (needs a Failed or Error workflow)",
+        "  --memoized: Re-use successful steps; requires --new and a Failed or Error workflow (not retry-safe)",
         "  -p, --parameter <k=v>: Override a global parameter (repeatable)",
         "  --priority <n>: Workflow priority",
       ],
       [
         "argo-workflows-axi wf resubmit nightly-etl-x7k2p",
-        "argo-workflows-axi wf resubmit nightly-etl-x7k2p --memoized --context kind-dev -n argo --apply",
+        "argo-workflows-axi wf resubmit nightly-etl-x7k2p --memoized --new --context kind-dev -n argo --apply",
         "argo-workflows-axi wf resubmit nightly-etl-x7k2p --new --context kind-dev -n argo --apply",
       ],
     ),
@@ -363,16 +363,20 @@ export const WRITES: Record<
           phase,
         };
       }
-      if (hasFlag(parsed, "--memoized")) {
-        return {
-          blocked:
-            "--memoized cannot be combined with deterministic resubmit creation",
-          phase,
-        };
-      }
-      return { change: "create or reuse a deterministic workflow copy", phase };
+      return {
+        change: hasFlag(parsed, "--memoized")
+          ? "create another workflow with Argo memoization (not retry-safe)"
+          : "create or reuse a deterministic workflow copy",
+        phase,
+      };
     },
     argoArgs: (parsed) => {
+      if (hasFlag(parsed, "--memoized") && !hasFlag(parsed, "--new")) {
+        throw axiError(
+          "--memoized requires --new because Argo's native memoized resubmit is not retry-safe",
+          "VALIDATION_ERROR",
+        );
+      }
       if (hasFlag(parsed, "--new") && flagValue(parsed, "--key")) {
         throw axiError(
           "--new cannot be combined with --key",
@@ -486,6 +490,22 @@ async function applyResubmits(
     }
     try {
       const source = await fetchWorkflow(row.name, forward);
+      if (hasFlag(parsed, "--memoized")) {
+        const { stdout } = await runWrite(
+          "wf.resubmit-native",
+          [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
+          gate.approval!,
+          { target: forward },
+        );
+        const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
+        const name = resubmitted?.metadata.name ?? "(unknown)";
+        results.push({
+          name,
+          result: `created ${name} (memoized; not retry-safe)`,
+          phase: resubmitted ? phaseOf(resubmitted) : "Pending",
+        });
+        continue;
+      }
       if (!source.metadata.uid)
         throw axiError(
           "Source workflow has no uid; cannot derive an idempotency key",
@@ -665,7 +685,11 @@ async function runNamedWrite<T>(
     ...names,
     ...spec.echoArgs(parsed),
   ].join(" ");
-  const gate = checkWrite(spec.op, parsed, target, command);
+  const writeOp =
+    spec.op === "wf.resubmit" && hasFlag(parsed, "--memoized")
+      ? "wf.resubmit-native"
+      : spec.op;
+  const gate = checkWrite(writeOp, parsed, target, command);
   const forward = forwardTarget(parsed);
 
   const rows: Row[] = [];

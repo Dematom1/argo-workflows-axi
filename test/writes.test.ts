@@ -390,6 +390,35 @@ describe("idempotent resubmit", () => {
     expect(createRace.stdout).toContain(`reused existing ${resultName}`);
   });
 
+  it("requires --new for native memoized resubmit", () => {
+    const unsafe = run(runArgs(["--memoized"]), {
+      responses: begin,
+      config: ALLOW,
+    });
+    expect(unsafe.exitCode).toBe(2);
+    expect(unsafe.stdout).toContain("--memoized requires --new");
+    expect(argoCalls(unsafe)).toEqual([]);
+
+    const deliberate = run(runArgs(["--memoized", "--new"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(deliberate.exitCode).toBe(0);
+    expect(writeCalls(deliberate)[0]).toEqual([
+      "resubmit",
+      "nightly-etl-x7k2p",
+      "--memoized",
+      "--output=json",
+      "--context=kind-dev",
+      "--namespace=argo",
+      "--loglevel=error",
+    ]);
+    expect(deliberate.stdout).toContain("memoized; not retry-safe");
+  });
+
   it("uses --key and --new to choose deterministic generations", () => {
     const custom = run(runArgs(["--key", "customer-run"]), {
       responses: [
@@ -513,9 +542,8 @@ describe("idempotent no-ops (S15)", () => {
     const result = run(["wf", "resubmit", "report-zz1", "--memoized"], {
       responses: READS,
     });
-    expect(result.stdout).toContain(
-      "blocked - --memoized needs a Failed or Error workflow (this one is Succeeded)",
-    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("--memoized requires --new");
   });
 });
 

@@ -190,6 +190,13 @@ export const OPERATIONS = {
     flags: ["--name", "--labels", "--parameter", "--priority", "--output"],
     targeted: true,
   },
+  "wf.resubmit-native": {
+    bin: "argo",
+    command: ["resubmit"],
+    tier: "write",
+    flags: ["--memoized", "--parameter", "--priority", "--output"],
+    targeted: true,
+  },
   "wf.stop": {
     bin: "argo",
     command: ["stop"],
