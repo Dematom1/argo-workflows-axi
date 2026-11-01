@@ -29,8 +29,9 @@ describe("write gate", () => {
       responses: READS,
       config: ALLOW,
     });
-    expect(preview.stdout).toContain("context: kind-dev");
-    expect(preview.stdout).toContain("namespace: argo");
+    expect(preview.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=argo",
+    );
     expect(preview.stdout).toContain("defaulted: true");
     expect(preview.stdout).toContain("--context kind-dev -n argo --apply");
 
@@ -59,7 +60,9 @@ describe("write gate", () => {
       },
       env: { ARGO_SERVER: "localhost:2746" },
     });
-    expect(server.stdout).toContain('server: "localhost:2746"');
+    expect(server.stdout).toContain(
+      "target: argo-server server=localhost:2746 namespace=argo",
+    );
     expect(server.stdout).toContain("defaulted: true");
     expect(server.stdout).toContain(
       "--argo-server localhost:2746 -n argo --apply",
