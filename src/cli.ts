@@ -29,17 +29,17 @@ export const DESCRIPTION =
 export const TOP_LEVEL_HELP = `usage: argo-workflows-axi [command] [args] [flags]
 description: ${DESCRIPTION}
 commands[11]:
-  (none): Live home view - target, workflows by phase, failed and running, cron summary
-  triage: What is broken - failed steps with hints and log tails, stuck Pending, suspended crons
-  wf list|get|logs|wait|lint: Read workflows (bounded, failing first)
-  wf submit|retry|resubmit|stop|terminate|suspend|resume: Gated writes (preview unless --apply)
-  cron list|get: Cron workflows; cron suspend|resume: gated writes
-  template list|get|lint: WorkflowTemplates
-  clustertemplate list|get: ClusterWorkflowTemplates
-  archive list|get: Archived workflows (Argo Server mode only)
-  ctx: Offline target view (mode, context or server, namespace, argo version, writable)
-  setup hooks: Install session start and end hooks; context end records command-name memory
-  update: Upgrade argo-workflows-axi
+  - (none): Live home view - target, workflows by phase, failed and running, cron summary
+  - triage: What is broken - failed steps with hints and log tails, stuck Pending, suspended crons
+  - wf list|get|logs|wait|lint: Read workflows (bounded, failing first)
+  - wf submit|retry|resubmit|stop|terminate|suspend|resume: Gated writes (preview unless --apply)
+  - cron list|get: Cron workflows; cron suspend|resume: gated writes
+  - template list|get|lint: WorkflowTemplates
+  - clustertemplate list|get: ClusterWorkflowTemplates
+  - archive list|get: Archived workflows (Argo Server mode only)
+  - ctx: Offline target view (mode, context or server, namespace, argo version, writable)
+  - setup hooks: Install session start and end hooks; context end records command-name memory
+  - update: Upgrade argo-workflows-axi
 flags (after the command, argo's own names):
   -n, --namespace <ns>: Namespace (default: ARGO_NAMESPACE, then the kube context's namespace)
   -A, --all-namespaces: All namespaces (reads only)
@@ -48,7 +48,6 @@ flags (after the command, argo's own names):
   --apply: Run a write; needs -n plus --context (or --argo-server) and a target in ~/.config/argo-workflows-axi/config.json
   --help: Help for any command
 examples[4]:
-
   - argo-workflows-axi triage
   - argo-workflows-axi wf get @latest
   - argo-workflows-axi wf logs nightly-etl-x7k2p --grep ERROR

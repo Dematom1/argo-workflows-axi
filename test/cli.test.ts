@@ -20,7 +20,7 @@ describe("cli basics", () => {
     const commands = topLevel.stdout.match(/commands\[\d+\]:\n((?:  .+\n)+)/)?.[1];
     expect(commands).toBeDefined();
     for (const row of commands!.trimEnd().split("\n")) {
-      const [name] = row.trim().split(":", 1)[0].split(/\s+/);
+      const [name] = row.trim().replace(/^-\s*/, "").split(":", 1)[0].split(/\s+/);
       if (name === "update" || name === "(none)") continue;
 
       const result = run([name, "--help"]);
