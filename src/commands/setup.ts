@@ -155,7 +155,7 @@ export async function setupCommand(
   }
 
   const settings = readSettings(settingsPath);
-  const groups = validateSessionEnd(settings);
+  validateSessionEnd(settings);
   const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const errors: string[] = [];
   installSessionStartHooks({
