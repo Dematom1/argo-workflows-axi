@@ -1,5 +1,6 @@
 import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
+import { buildCommands } from "../src/cli.js";
 import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
 
 describe("cli basics", () => {
@@ -17,18 +18,10 @@ describe("cli basics", () => {
     expect(topLevel.exitCode).toBe(0);
     expect(() => decode(topLevel.stdout)).not.toThrow();
 
-    const commands = topLevel.stdout.match(
-      /commands\[\d+\]:\n((?: {2}.+\n)+)/,
-    )?.[1];
-    expect(commands).toBeDefined();
-    for (const row of commands!.trimEnd().split("\n")) {
-      const [name] = row
-        .trim()
-        .replace(/^-\s*/, "")
-        .split(":", 1)[0]
-        .split(/\s+/);
-      if (name === "(none)") continue;
-
+    const registeredCommands = Object.keys(buildCommands());
+    expect(registeredCommands).toContain("context");
+    expect(registeredCommands).not.toContain("update");
+    for (const name of registeredCommands) {
       const result = run([name, "--help"]);
       expect(result.exitCode, name).toBe(0);
       expect(() => decode(result.stdout), name).not.toThrow();

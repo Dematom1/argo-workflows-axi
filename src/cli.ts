@@ -189,9 +189,11 @@ function refusedCommand(key: string): AxiCliCommand<undefined> {
   };
 }
 
-function buildCommands(): Record<string, AxiCliCommand<undefined>> {
+export function buildCommands(): Record<string, AxiCliCommand<undefined>> {
   const commands: Record<string, AxiCliCommand<undefined>> = {
     context: rendered(async (args) => {
+      if (args.includes("--help"))
+        return `command: argo-workflows-axi context\ndescription: Internal session context recorder\n`;
       if (args[0] === "end") {
         let payload: unknown;
         try {
