@@ -507,6 +507,25 @@ async function applyResubmits(
         );
         const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
         const name = resubmitted?.metadata.name ?? "(unknown)";
+        if (priority !== undefined && resubmitted?.metadata.name) {
+          try {
+            await runWrite(
+              "wf.priority-patch",
+              [
+                resubmitted.metadata.name,
+                `--type=merge`,
+                `--patch={"spec":{"priority":${Number(priority)}}}`,
+              ],
+              gate.approval!,
+              { target: forward },
+            );
+          } catch (error) {
+            throw axiError(
+              `Created workflow ${name}, but priority ${priority} was not applied: ${errorMessage(error)}. Remedy: kubectl --context=${target.context} -n ${target.namespace} patch workflow ${name} --type=merge --patch='{"spec":{"priority":${Number(priority)}}}'`,
+              "UNKNOWN",
+            );
+          }
+        }
         results.push({
           name,
           result: `created ${name} (memoized; not retry-safe)`,

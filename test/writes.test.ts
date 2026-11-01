@@ -455,6 +455,7 @@ describe("idempotent resubmit", () => {
         responses: [
           ...begin,
           { match: ["resubmit"], stdout: json(createdWorkflow()) },
+          { bin: "kubectl", match: ["patch", "workflow"], stdout: "" },
         ],
         config: ALLOW,
       },

@@ -29,6 +29,8 @@ export function isApprovalFor(
     typeof value === "object" &&
     value !== null &&
     minted.has(value) &&
-    (value as WriteApproval).op === op
+    ((value as WriteApproval).op === op ||
+      (op === "wf.priority-patch" &&
+        (value as WriteApproval).op === "wf.resubmit-native"))
   );
 }
