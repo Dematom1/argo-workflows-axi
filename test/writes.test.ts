@@ -449,18 +449,22 @@ describe("idempotent resubmit", () => {
     expect(unsafe.stdout).toContain("--memoized requires --new");
     expect(argoCalls(unsafe)).toEqual([]);
 
-    const deliberate = run(runArgs(["--memoized", "--new"]), {
-      responses: [
-        ...begin,
-        { match: ["resubmit"], stdout: json(createdWorkflow()) },
-      ],
-      config: ALLOW,
-    });
+    const deliberate = run(
+      runArgs(["--memoized", "--new", "--priority", "5"]),
+      {
+        responses: [
+          ...begin,
+          { match: ["resubmit"], stdout: json(createdWorkflow()) },
+        ],
+        config: ALLOW,
+      },
+    );
     expect(deliberate.exitCode).toBe(0);
     expect(writeCalls(deliberate)[0]).toEqual([
       "resubmit",
       "nightly-etl-x7k2p",
       "--memoized",
+      "--priority=5",
       "--output=json",
       "--context=kind-dev",
       "--namespace=argo",
@@ -507,7 +511,14 @@ describe("idempotent resubmit", () => {
         ...begin,
         {
           match: ["list"],
-          stdout: json([createdWorkflow("0"), createdWorkflow("not-a-number")]),
+          stdout: json([
+            createdWorkflow("0"),
+            createdWorkflow("not-a-number"),
+            createdWorkflow(""),
+            createdWorkflow("1e3"),
+            createdWorkflow("0x10"),
+            createdWorkflow("9007199254740992"),
+          ]),
         },
         {
           match: ["get"],

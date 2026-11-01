@@ -492,9 +492,16 @@ async function applyResubmits(
     try {
       const source = await fetchWorkflow(row.name, forward);
       if (hasFlag(parsed, "--memoized")) {
+        const priority = flagValue(parsed, "--priority");
         const { stdout } = await runWrite(
           "wf.resubmit-native",
-          [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
+          [
+            row.name,
+            "--memoized",
+            ...(priority !== undefined ? [`--priority=${priority}`] : []),
+            ...parameterArgs(parsed),
+            "--output=json",
+          ],
           gate.approval!,
           { target: forward },
         );
@@ -521,10 +528,10 @@ async function applyResubmits(
         : [];
       const generation = hasFlag(parsed, "--new")
         ? prior.reduce((max, wf) => {
-            const generation = Number(
-              wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL],
-            );
-            return Number.isSafeInteger(generation) && generation >= 0
+            const label = wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL];
+            if (label === undefined || !/^\d+$/.test(label)) return max;
+            const generation = Number(label);
+            return Number.isSafeInteger(generation)
               ? Math.max(max, generation)
               : max;
           }, -1) + 1
