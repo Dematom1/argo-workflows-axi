@@ -48,6 +48,8 @@ export interface RunOptions {
   /** Initial Claude settings file contents and mode. */
   claudeSettings?: string;
   claudeSettingsMode?: number;
+  claudeSettingsSymlink?: boolean;
+  umask?: number;
   /** Omit the fake kubectl (simulates kubectl missing). */
   noKubectl?: boolean;
   bin?: string;
@@ -116,15 +118,18 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
   }
   if (options.claudeSettings !== undefined) {
     mkdirSync(join(home, ".claude"), { recursive: true });
+    const settingsPath = join(home, ".claude", "settings.json");
+    const targetPath = join(home, ".claude", "settings-target.json");
     writeFileSync(
-      join(home, ".claude", "settings.json"),
+      options.claudeSettingsSymlink ? targetPath : settingsPath,
       options.claudeSettings,
     );
     if (options.claudeSettingsMode !== undefined)
       chmodSync(
-        join(home, ".claude", "settings.json"),
+        options.claudeSettingsSymlink ? targetPath : settingsPath,
         options.claudeSettingsMode,
       );
+    if (options.claudeSettingsSymlink) symlinkSync(targetPath, settingsPath);
   }
   const scenario = join(dir, "scenario.json");
   writeFileSync(
@@ -148,6 +153,7 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
     input: options.stdin ?? "",
     encoding: "utf-8",
     timeout: 30_000,
+    ...(options.umask === undefined ? {} : { umask: options.umask }),
   });
   const calls = existsSync(log)
     ? readFileSync(log, "utf-8")

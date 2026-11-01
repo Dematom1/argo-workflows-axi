@@ -1,5 +1,7 @@
 import {
+  chmodSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readFileSync,
   realpathSync,
@@ -68,7 +70,17 @@ function validateSessionEnd(settings: Settings): Group[] {
     !Array.isArray(groups) ||
     groups.some(
       (group) =>
-        typeof group !== "object" || group === null || Array.isArray(group),
+        typeof group !== "object" ||
+        group === null ||
+        Array.isArray(group) ||
+        (Array.isArray(group.hooks) &&
+          group.hooks.some(
+            (hook: unknown) =>
+              typeof hook !== "object" ||
+              hook === null ||
+              Array.isArray(hook) ||
+              ("command" in hook && typeof hook.command !== "string"),
+          )),
     )
   )
     throw axiError(
@@ -78,7 +90,14 @@ function validateSessionEnd(settings: Settings): Group[] {
   return groups as Group[];
 }
 function writeSettings(path: string, settings: Settings): void {
-  const dir = dirname(path);
+  let destination = path;
+  try {
+    if (lstatSync(path).isSymbolicLink()) destination = realpathSync(path);
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
+  const dir = dirname(destination);
   mkdirSync(dir, { recursive: true });
   let mode: number | undefined;
   try {
@@ -90,10 +109,10 @@ function writeSettings(path: string, settings: Settings): void {
   const temp = join(dir, `.settings-${randomUUID()}.tmp`);
   try {
     writeFileSync(temp, JSON.stringify(settings, null, 2) + "\n", {
-      ...(mode === undefined ? {} : { mode }),
       flag: "wx",
     });
-    renameSync(temp, path);
+    if (mode !== undefined) chmodSync(temp, mode);
+    renameSync(temp, destination);
   } finally {
     if (existsSync(temp)) unlinkSync(temp);
   }
