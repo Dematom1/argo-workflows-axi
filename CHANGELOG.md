@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.10...argo-workflows-axi-v0.1.11) (2026-11-01)
+
+
+### Bug Fixes
+
+* **wf:** validate and patch resubmit priority ([#38](https://github.com/Dematom1/argo-workflows-axi/issues/38)) ([547a54c](https://github.com/Dematom1/argo-workflows-axi/commit/547a54cffa942e8abe060cb81dcf1a4fd8dadaa8))
+
 ## [0.1.10](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.9...argo-workflows-axi-v0.1.10) (2026-11-01)
 
 
