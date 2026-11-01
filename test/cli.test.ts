@@ -27,7 +27,7 @@ describe("cli basics", () => {
         .replace(/^-\s*/, "")
         .split(":", 1)[0]
         .split(/\s+/);
-      if (name === "update" || name === "(none)") continue;
+      if (name === "(none)") continue;
 
       const result = run([name, "--help"]);
       expect(result.exitCode, name).toBe(0);
