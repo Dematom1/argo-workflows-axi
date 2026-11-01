@@ -52,6 +52,22 @@ describe("write gate", () => {
     expect(none.stdout).toContain("--context <context>");
   });
 
+  it("defaults to the sole allowlisted target despite ambient kubeconfig", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: [
+        { bin: "kubectl", match: ["current-context"], stdout: "kind-dev\\n" },
+        { bin: "kubectl", match: ["view", "--minify"], stdout: "default" },
+        ...READS.slice(2),
+      ],
+      config: { writableTargets: [{ context: "prod", namespace: "argo" }] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "target: kubernetes context=prod namespace=argo",
+    );
+    expect(result.stdout).toContain("--context prod -n argo --apply");
+  });
+
   it("defaults server-only targets and refuses mixed target ambiguity", () => {
     const server = run(["wf", "stop", "ingest-q9w8e"], {
       responses: READS,
