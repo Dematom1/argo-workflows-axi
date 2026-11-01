@@ -64,6 +64,7 @@ examples[2]:
 export const CRON_GET_HELP = `command: argo-workflows-axi cron get <name>
 description: One cron workflow - schedule, timezone, suspended, concurrency, last run, active runs, entrypoint and parameters
 flags:
+  --full: Untruncated condition messages
 ${TARGET_LINE}
 examples[1]:
   argo-workflows-axi cron get nightly-etl
@@ -122,7 +123,12 @@ export async function cronList(args: string[]): Promise<Output> {
 export async function cronGet(args: string[]): Promise<Output> {
   if (args.includes("--help")) return CRON_GET_HELP;
   const usage = "argo-workflows-axi cron get <name>";
-  const parsed = parseArgs(args, TARGET_FLAGS, usage);
+  const parsed = parseArgs(
+    args,
+    mergeSpecs(TARGET_FLAGS, { bool: ["--full"] }),
+    usage,
+  );
+  const full = hasFlag(parsed, "--full");
   const [name] = requirePositionals(parsed, 1, 1, usage);
   assertName(name, "cron workflow", usage);
   const cron = await getCronWorkflow(name, forwardTarget(parsed));
@@ -153,8 +159,15 @@ export async function cronGet(args: string[]): Promise<Output> {
   if (conditions.length > 0) {
     out.conditions = conditions.map((c) => ({
       type: c.type ?? "",
-      message: truncateHead(c.message ?? "", 200).text,
+      message: full
+        ? (c.message ?? "")
+        : truncateHead(c.message ?? "", 200).text,
     }));
+  }
+  if (!full && conditions.some((c) => (c.message?.length ?? 0) > 200)) {
+    out.help = [
+      `Run \`argo-workflows-axi cron get ${name} --full${targetSuffix(parsed)}\` for untruncated condition messages`,
+    ];
   }
   return redacted(out);
 }

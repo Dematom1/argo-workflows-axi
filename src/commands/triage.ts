@@ -156,6 +156,7 @@ export async function triageCommand(
   }
 
   let logRedactions = 0;
+  const detailedWorkflows: Workflow[] = [];
   if (failed.length > 0) {
     const detailed: Array<Record<string, unknown>> = [];
     for (const listed of failed.slice(0, DETAILED)) {
@@ -170,6 +171,7 @@ export async function triageCommand(
           // Offloaded nodes we cannot fetch: show what the list had.
         }
       }
+      detailedWorkflows.push(wf);
       const nodes = failedLeafNodes(wf);
       const step = nodes[nodes.length - 1];
       const entry: Record<string, unknown> = {};
@@ -224,7 +226,7 @@ export async function triageCommand(
       name: wf.metadata.name,
       phase: phaseOf(wf),
       age: age(wf.metadata.creationTimestamp),
-      reason: truncateHead(reason, 200).text,
+      reason,
     }));
   }
 
@@ -233,6 +235,18 @@ export async function triageCommand(
   }
 
   const help: string[] = [];
+  for (const wf of detailedWorkflows) {
+    if (
+      [
+        wf.status?.message,
+        ...failedLeafNodes(wf).map((node) => node.message),
+      ].some((message) => (message?.length ?? 0) > 200)
+    ) {
+      help.push(
+        `Run \`argo-workflows-axi wf get ${wf.metadata.name}${all ? ` -n ${wf.metadata.namespace}` : ""} --full${suffix}\` for untruncated workflow and step messages`,
+      );
+    }
+  }
   if (failed.length > 0) {
     help.push(
       `Run \`argo-workflows-axi wf logs <workflow>${suffix}\` for more of the failing step's log`,

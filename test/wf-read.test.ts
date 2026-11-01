@@ -145,6 +145,18 @@ describe("wf list", () => {
     expect(result.stdout).not.toContain("to see all 1001");
   });
 
+  it("includes the workflow namespace in --full guidance with -A", () => {
+    const wf = d.failedEtl();
+    wf.metadata.namespace = "team-a";
+    wf.status!.message = "x".repeat(500);
+    const result = run(["wf", "list", "-A"], {
+      responses: [...KUBE_DEFAULTS, { match: ["list"], stdout: json([wf]) }],
+    });
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p -n team-a --full`",
+    );
+  });
+
   it("adds a namespace column with -A and extra --fields columns", () => {
     const result = run(["wf", "list", "-A", "--fields", "duration,cron"], {
       responses: [
@@ -181,6 +193,28 @@ describe("wf get", () => {
       responses,
     });
     expect(full.stdout).toContain("x".repeat(5000));
+  });
+
+  it("shows exact full-value guidance for truncated workflow and node messages", () => {
+    const wf = d.failedEtl();
+    wf.status!.message = "m".repeat(900);
+    const node = Object.values(wf.status?.nodes ?? {}).find(
+      (n) => n.type === "Pod" && n.phase === "Failed",
+    );
+    if (!node) throw new Error("fixture lacks failed pod");
+    node.message = "n".repeat(300);
+    const responses = [...KUBE_DEFAULTS, { match: ["get"], stdout: json(wf) }];
+    const preview = run(["wf", "get", "nightly-etl-x7k2p"], { responses });
+    expect(preview.stdout).toContain("truncated, 900 chars total");
+    expect(preview.stdout).toContain("truncated, 300 chars total");
+    expect(preview.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p --full` for untruncated messages",
+    );
+    const full = run(["wf", "get", "nightly-etl-x7k2p", "--full"], {
+      responses,
+    });
+    expect(full.stdout).toContain("m".repeat(900));
+    expect(full.stdout).toContain("n".repeat(300));
   });
 
   it("shows the summary, only failed nodes with hints, and redacts sensitive parameters", () => {
