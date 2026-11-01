@@ -54,12 +54,16 @@ describe("write gate", () => {
   it("defaults server-only targets and refuses mixed target ambiguity", () => {
     const server = run(["wf", "stop", "ingest-q9w8e"], {
       responses: READS,
-      config: { writableTargets: [{ server: "localhost:2746", namespace: "argo" }] },
+      config: {
+        writableTargets: [{ server: "localhost:2746", namespace: "argo" }],
+      },
       env: { ARGO_SERVER: "localhost:2746" },
     });
     expect(server.stdout).toContain('server: "localhost:2746"');
     expect(server.stdout).toContain("defaulted: true");
-    expect(server.stdout).toContain("--argo-server localhost:2746 -n argo --apply");
+    expect(server.stdout).toContain(
+      "--argo-server localhost:2746 -n argo --apply",
+    );
 
     const mixed = run(["wf", "stop", "ingest-q9w8e"], {
       config: {
@@ -94,7 +98,9 @@ describe("write gate", () => {
   });
 
   it("says so in the preview when the target is not in the allowlist (default: none)", () => {
-    const result = run(["wf", "suspend", "ingest-q9w8e", ...EXPLICIT], { responses: READS });
+    const result = run(["wf", "suspend", "ingest-q9w8e", ...EXPLICIT], {
+      responses: READS,
+    });
     expect(result.stdout).toContain(
       "writable: no - this target is not in ~/.config/argo-workflows-axi/config.json",
     );
@@ -989,7 +995,10 @@ describe("wf submit", () => {
     const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
     const file = join(dir, "tmpl.yaml");
     writeFileSync(file, "kind: WorkflowTemplate\nmetadata:\n  name: x\n");
-    const wrongKind = run(["wf", "submit", file], { responses: KUBE_DEFAULTS, config: ALLOW });
+    const wrongKind = run(["wf", "submit", file], {
+      responses: KUBE_DEFAULTS,
+      config: ALLOW,
+    });
     expect(wrongKind.exitCode).toBe(2);
     expect(wrongKind.stdout).toContain("Expected kind Workflow");
     const both = run(["wf", "submit", file, "--from", "workflowtemplate/x"]);
@@ -1092,7 +1101,10 @@ describe("wf submit", () => {
       "dup.yaml",
       "kind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\n  namespace: prod\n",
     );
-    const result = run(["wf", "submit", file], { responses: KUBE_DEFAULTS, config: ALLOW });
+    const result = run(["wf", "submit", file], {
+      responses: KUBE_DEFAULTS,
+      config: ALLOW,
+    });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("not valid YAML");
     expect(argoCalls(result)).toEqual([]);

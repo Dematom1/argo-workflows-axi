@@ -38,7 +38,10 @@ export function resolveWriteTarget(target: Target): Target {
   if (targets.length !== 1) {
     const list = targets.length
       ? targets
-          .map((t) => `  ${t.context ? `context=${t.context}` : `server=${t.server}`} namespace=${t.namespace}`)
+          .map(
+            (t) =>
+              `  ${t.context ? `context=${t.context}` : `server=${t.server}`} namespace=${t.namespace}`,
+          )
           .join("\n")
       : "  (none)";
     throw axiError(
