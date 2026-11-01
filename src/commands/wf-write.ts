@@ -503,7 +503,7 @@ async function applyResubmits(
 ): Promise<Output> {
   const results: Array<Record<string, string>> = [];
   let failures = 0;
-  const suffix = targetSuffix(parsed);
+  const suffix = ` ${explicitTargetFlags(target)}`;
   for (const row of rows) {
     if (row.plan.blocked) {
       failures += 1;
