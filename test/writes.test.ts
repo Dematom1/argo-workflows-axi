@@ -78,6 +78,20 @@ describe("write gate", () => {
     expect(mixed.stdout).toContain("server=localhost:2746 namespace=argo");
   });
 
+  it("does not let partial Kubernetes flags override ARGO_SERVER mode", () => {
+    for (const flags of [["--context", "kind-dev"], ["-n", "argo"]]) {
+      const result = run(["wf", "stop", "ingest-q9w8e", ...flags], {
+        config: ALLOW,
+        env: { ARGO_SERVER: "prod-argo:2746" },
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain(
+        "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
+      );
+      expect(result.calls).toEqual([]);
+    }
+  });
+
   it("previews by default: no write reaches argo and the exact run command is printed", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "report-zz1"], {
       responses: READS,

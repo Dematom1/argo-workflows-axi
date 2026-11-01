@@ -20,6 +20,19 @@ export const APPLY_FLAG = "--apply";
 /** Resolve an omitted write target only when the allowlist has one match. */
 export function resolveWriteTarget(target: Target): Target {
   if (
+    envServer() &&
+    target.mode === "argo-server" &&
+    !target.explicit.server &&
+    (target.explicit.context || target.explicit.namespace) &&
+    !(target.explicit.context && target.explicit.namespace)
+  ) {
+    throw axiError(
+      "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
+      "VALIDATION_ERROR",
+      ["Pass --argo-server to target Argo Server explicitly"],
+    );
+  }
+  if (
     target.explicit.namespace &&
     (target.explicit.context || target.explicit.server)
   )
