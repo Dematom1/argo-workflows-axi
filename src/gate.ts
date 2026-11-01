@@ -9,8 +9,8 @@ import { envServer, type Target } from "./target.js";
 /**
  * The write gate (design S3 + S8):
  * - without `--apply` every write is a preview: nothing is sent;
- * - `--apply` needs the target spelled out (`-n` plus `--context`, or
- *   `--argo-server` in Argo Server mode) and never accepts `-A`;
+ * - `--apply` needs a writable target (explicit or uniquely defaulted) and
+ *   never accepts `-A`;
  * - the target must be in the local allowlist file (default: none).
  * Only this module mints the approval the seam requires for a write.
  */
@@ -37,14 +37,20 @@ export function resolveWriteTarget(target: Target): Target {
   )
     return target;
   const configured = loadConfig().writableTargets;
+  const hasExplicitTarget =
+    target.explicit.context || target.explicit.server || target.explicit.namespace;
   const targets = configured.filter((entry) => {
     if (target.explicit.server && entry.server !== target.server) return false;
     if (target.explicit.context && entry.context !== target.context) return false;
-    if (target.explicit.namespace && entry.namespace !== "*" && entry.namespace !== target.namespace)
+    if (
+      target.explicit.namespace &&
+      entry.namespace !== "*" &&
+      entry.namespace !== target.namespace
+    )
       return false;
     return true;
   });
-  if (targets.length > 1 && (target.explicit.context || target.explicit.server || target.explicit.namespace)) {
+  if (hasExplicitTarget && targets.length > 1) {
     const inferred = targets.filter(
       (entry) =>
         (target.explicit.context || target.explicit.server ||

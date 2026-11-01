@@ -1107,7 +1107,7 @@ describe("wf submit", () => {
         ...KUBE_DEFAULTS,
         { match: ["lint"], stdout: "no linting errors found!\n" },
       ],
-      config: ALLOW,
+      config: { writableTargets: [{ context: "prod", namespace: "argo" }] },
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("source: manifest");
@@ -1115,7 +1115,7 @@ describe("wf submit", () => {
     expect(result.stdout).toContain("entrypoint: say");
     expect(result.stdout).toContain("not idempotent");
     expect(result.stdout).toContain(
-      `run: argo-workflows-axi wf submit ${file} --context kind-dev -n argo --apply`,
+      `run: argo-workflows-axi wf submit ${file} --context prod -n argo --apply`,
     );
     expect(writeCalls(result)).toEqual([]);
   });
