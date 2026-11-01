@@ -79,7 +79,10 @@ describe("write gate", () => {
   });
 
   it("does not let partial Kubernetes flags override ARGO_SERVER mode", () => {
-    for (const flags of [["--context", "kind-dev"], ["-n", "argo"]]) {
+    for (const flags of [
+      ["--context", "kind-dev"],
+      ["-n", "argo"],
+    ]) {
       const result = run(["wf", "stop", "ingest-q9w8e", ...flags], {
         config: ALLOW,
         env: { ARGO_SERVER: "prod-argo:2746" },
