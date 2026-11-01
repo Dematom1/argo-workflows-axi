@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -294,6 +295,153 @@ describe("write gate", () => {
     expect(result.stdout).toContain(
       "nightly-etl-x7k2p,already_completed,Failed",
     );
+  });
+});
+
+describe("idempotent resubmit", () => {
+  const source = d.failedEtl();
+  const uid = source.metadata.uid as string;
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex").slice(0, 20);
+  const resultName = `nightly-etl-x7k2p-rs-${hash(`${uid}:0`)}`;
+  const createdWorkflow = (generation = "0", key = hash(`${uid}:0`)) => ({
+    metadata: {
+      name: resultName,
+      namespace: "argo",
+      uid: "copy-uid",
+      labels: {
+        "axi.argoproj.io/resubmit-source": hash(uid),
+        "axi.argoproj.io/resubmit-key": key,
+        "axi.argoproj.io/resubmit-generation": generation,
+      },
+    },
+    spec: source.spec,
+    status: { phase: "Running" },
+  });
+  const begin = [
+    ...KUBE_DEFAULTS,
+    { match: ["get", "nightly-etl-x7k2p"], stdout: json(source) },
+  ];
+  const miss = {
+    match: ["get", resultName],
+    stderr: "Error: rpc error: code = NotFound desc = workflow not found\\n",
+    exit: 1,
+  };
+  const prior = { match: ["list"], stdout: "[]" };
+  const runArgs = (args: string[]) => [
+    "wf",
+    "resubmit",
+    "nightly-etl-x7k2p",
+    ...EXPLICIT,
+    ...args,
+    "--apply",
+  ];
+
+  it("creates with a stable name and idempotency label; retry reuses it", () => {
+    const first = run(runArgs([]), {
+      responses: [...begin, prior, miss, { match: ["submit"], stdout: "{}" }],
+      config: ALLOW,
+    });
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toContain(`created ${resultName}`);
+    const submit = first.calls.find((call) => call.argv[0] === "submit");
+    expect(submit?.argv).toContain(`--name=${resultName}`);
+    expect(submit?.files).toBeDefined();
+    expect(Object.values(submit?.files ?? {}).join("\\n")).toContain(
+      `name: ${resultName}`,
+    );
+    expect(Object.values(submit?.files ?? {}).join("\\n")).toContain(
+      `axi.argoproj.io/resubmit-key: ${hash(`${uid}:0`)}`,
+    );
+
+    const retry = run(runArgs([]), {
+      responses: [
+        ...begin,
+        prior,
+        { match: ["get", resultName], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(retry.exitCode).toBe(0);
+    expect(retry.stdout).toContain(`reused existing ${resultName}`);
+    expect(writeCalls(retry)).toEqual([]);
+
+    const createRace = run(runArgs([]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", resultName],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+          times: 1,
+        },
+        {
+          match: ["submit"],
+          stderr:
+            "Error: rpc error: code = AlreadyExists desc = workflows already exists\\n",
+          exit: 1,
+        },
+        { match: ["get", resultName], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(createRace.exitCode).toBe(0);
+    expect(createRace.stdout).toContain(`reused existing ${resultName}`);
+  });
+
+  it("uses --key and --new to choose deterministic generations", () => {
+    const custom = run(runArgs(["--key", "customer-run"]), {
+      responses: [
+        ...begin,
+        prior,
+        {
+          match: ["get"],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+        },
+        { match: ["submit"] },
+      ],
+      config: ALLOW,
+    });
+    const customName = `nightly-etl-x7k2p-rs-${hash("customer-run")}`;
+    expect(custom.stdout).toContain(`created ${customName}`);
+    expect(
+      custom.calls.find((call) => call.argv[0] === "submit")?.argv,
+    ).toContain(`--name=${customName}`);
+    const customRetry = run(runArgs(["--key", "customer-run"]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", customName],
+          stdout: json(createdWorkflow("0", hash("customer-run"))),
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(customRetry.stdout).toContain(`reused existing ${customName}`);
+    expect(writeCalls(customRetry)).toEqual([]);
+
+    const next = run(runArgs(["--new"]), {
+      responses: [
+        ...begin,
+        { match: ["list"], stdout: json([createdWorkflow("0")]) },
+        {
+          match: ["get"],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+        },
+        { match: ["submit"] },
+      ],
+      config: ALLOW,
+    });
+    const nextName = `nightly-etl-x7k2p-rs-${hash(`${uid}:1`)}`;
+    expect(next.stdout).toContain(`created ${nextName}`);
+    expect(
+      next.calls.find((call) => call.argv[0] === "submit")?.argv,
+    ).toContain(`--name=${nextName}`);
   });
 });
 

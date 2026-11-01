@@ -185,9 +185,9 @@ export const OPERATIONS = {
   },
   "wf.resubmit": {
     bin: "argo",
-    command: ["resubmit"],
+    command: ["submit"],
     tier: "write",
-    flags: ["--memoized", "--parameter", "--priority", "--output"],
+    flags: ["--name", "--labels", "--parameter", "--priority", "--output"],
     targeted: true,
   },
   "wf.stop": {
