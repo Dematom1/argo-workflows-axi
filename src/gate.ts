@@ -17,6 +17,43 @@ import { envServer, type Target } from "./target.js";
 
 export const APPLY_FLAG = "--apply";
 
+/** Resolve an omitted write target only when the allowlist has one match. */
+export function resolveWriteTarget(target: Target): Target {
+  if (
+    target.mode !== "kubernetes" ||
+    (target.explicit.context && target.explicit.namespace)
+  )
+    return target;
+  const targets = loadConfig().writableTargets.filter(
+    (entry) =>
+      entry.context !== undefined &&
+      (target.explicit.context ? entry.context === target.context : true) &&
+      (target.explicit.namespace
+        ? entry.namespace === "*" || entry.namespace === target.namespace
+        : true),
+  );
+  if (targets.length !== 1) {
+    const list = targets.length
+      ? targets.map((t) => `  ${t.context} namespace=${t.namespace}`).join("\n")
+      : "  (none)";
+    throw axiError(
+      `Cannot determine a writable target (${targets.length} matching):\n${list}`,
+      "VALIDATION_ERROR",
+      ["Pass --context <context> and -n <namespace> explicitly"],
+    );
+  }
+  const chosen = targets[0];
+  return {
+    ...target,
+    context: chosen.context,
+    namespace: chosen.namespace === "*" ? target.namespace : chosen.namespace,
+    namespaceSource: target.explicit.namespace
+      ? target.namespaceSource
+      : "default",
+    defaulted: true,
+  };
+}
+
 export interface GateDecision {
   apply: boolean;
   /** `yes`, or `no - <why>`. */
@@ -80,7 +117,8 @@ export function checkWrite(
   }
 
   const missing: string[] = [];
-  if (!target.explicit.namespace) missing.push("-n/--namespace");
+  if (!target.explicit.namespace && !target.defaulted)
+    missing.push("-n/--namespace");
   if (target.mode === "argo-server") {
     if (!target.explicit.server) {
       missing.push(
@@ -89,7 +127,7 @@ export function checkWrite(
           : "--argo-server",
       );
     }
-  } else if (!target.explicit.context) {
+  } else if (!target.explicit.context && !target.defaulted) {
     missing.push("--context");
   }
   if (missing.length > 0) {

@@ -33,7 +33,12 @@ import {
 } from "../cron-data.js";
 import { axiError, errorCode, errorMessage } from "../errors.js";
 import { shellQuote } from "../format.js";
-import { APPLY_FLAG, checkWrite, type GateDecision } from "../gate.js";
+import {
+  APPLY_FLAG,
+  checkWrite,
+  resolveWriteTarget,
+  type GateDecision,
+} from "../gate.js";
 import { redactText, redactValue } from "../redact.js";
 import type { WriteOperationId } from "../registry.js";
 import { parseJsonStream, runWrite } from "../seam.js";
@@ -730,7 +735,7 @@ async function runNamedWrite<T>(
   // Validates flag values (e.g. --parameter, --priority) before any call.
   const argoArgs = spec.argoArgs(parsed);
 
-  const target = await resolveTarget(parsed);
+  const target = resolveWriteTarget(await resolveTarget(parsed));
   if (
     spec.op === "wf.resubmit" &&
     hasFlag(parsed, "--memoized") &&
@@ -753,7 +758,9 @@ async function runNamedWrite<T>(
       ? "wf.resubmit-native"
       : spec.op;
   const gate = checkWrite(writeOp, parsed, target, command);
-  const forward = forwardTarget(parsed);
+  const forward = target.defaulted
+    ? { context: target.context, namespace: target.namespace }
+    : forwardTarget(parsed);
 
   const rows: Row[] = [];
   for (const name of names) {
@@ -788,6 +795,10 @@ function previewOutput<T>(
     dry_run: true,
     action: `${spec.noun} ${spec.verb}`,
     target: targetLine(target),
+    context: target.context,
+    namespace: target.namespace,
+    server: target.server,
+    defaulted: target.defaulted === true,
     writable: gate.writable,
     [spec.noun === "wf" ? "workflows" : "cron_workflows"]: rows.map((r) => ({
       name: r.name,
@@ -1196,8 +1207,10 @@ export async function wfSubmit(args: string[]): Promise<Output> {
     );
   }
   const priority = validatePriority(parsed);
-  const target = await resolveTarget(parsed);
-  const forward = forwardTarget(parsed);
+  const target = resolveWriteTarget(await resolveTarget(parsed));
+  const forward = target.defaulted
+    ? { context: target.context, namespace: target.namespace }
+    : forwardTarget(parsed);
   const echo: string[] = ["wf", "submit"];
   if (from) echo.push(`--from ${from.kind}/${from.name}`);
   else echo.push(shellQuote(files[0]));
@@ -1265,6 +1278,10 @@ export async function wfSubmit(args: string[]): Promise<Output> {
         dry_run: true,
         action: "wf submit",
         target: describeTarget(target),
+        context: target.context,
+        namespace: target.namespace,
+        server: target.server,
+        defaulted: target.defaulted === true,
         writable: gate.writable,
         source: source.description,
         workflow: workflowName,

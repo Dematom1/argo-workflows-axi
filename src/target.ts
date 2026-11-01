@@ -22,6 +22,7 @@ export interface Target {
   explicit: { context: boolean; server: boolean; namespace: boolean };
   /** Why the context could not be resolved, when it could not. */
   contextUnavailable?: string;
+  defaulted?: boolean;
 }
 
 export function targetArgsFrom(parsed: ParsedArgs): TargetArgs {

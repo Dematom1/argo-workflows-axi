@@ -24,6 +24,33 @@ const READS: FakeResponse[] = [
 ];
 
 describe("write gate", () => {
+  it("defaults to the sole writable target and names it in preview and apply", () => {
+    const preview = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: READS,
+      config: ALLOW,
+    });
+    expect(preview.stdout).toContain("context: kind-dev");
+    expect(preview.stdout).toContain("namespace: argo");
+    expect(preview.stdout).toContain("defaulted: true");
+    expect(preview.stdout).toContain("--context kind-dev -n argo --apply");
+
+    const ambiguous = run(["wf", "stop", "ingest-q9w8e"], {
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { context: "prod", namespace: "argo" },
+        ],
+      },
+    });
+    expect(ambiguous.stdout).toContain("2 matching");
+    expect(ambiguous.stdout).toContain("kind-dev namespace=argo");
+    expect(ambiguous.stdout).toContain("prod namespace=argo");
+
+    const none = run(["wf", "stop", "ingest-q9w8e"]);
+    expect(none.stdout).toContain("0 matching");
+    expect(none.stdout).toContain("--context <context>");
+  });
+
   it("previews by default: no write reaches argo and the exact run command is printed", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "report-zz1"], {
       responses: READS,
