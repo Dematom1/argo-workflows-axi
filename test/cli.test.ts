@@ -1,3 +1,4 @@
+import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
 
@@ -9,6 +10,46 @@ describe("cli basics", () => {
       expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
       expect(result.calls).toEqual([]);
     }
+  });
+
+  it("decodes every registered command and subcommand help", () => {
+    const topLevel = run(["--help"]);
+    expect(topLevel.exitCode).toBe(0);
+    expect(() => decode(topLevel.stdout)).not.toThrow();
+
+    const commands = [
+      "triage",
+      "wf",
+      "cron",
+      "template",
+      "clustertemplate",
+      "archive",
+      "ctx",
+      "setup",
+    ];
+    const subcommands: Record<string, string[]> = {
+      wf: [
+        "list", "get", "logs", "wait", "lint", "submit", "retry", "resubmit",
+        "stop", "terminate", "suspend", "resume",
+      ],
+      cron: ["list", "get", "suspend", "resume"],
+      template: ["list", "get", "lint"],
+      clustertemplate: ["list", "get"],
+      archive: ["list", "get"],
+    };
+
+    for (const command of commands) {
+      const result = run([command, "--help"]);
+      expect(result.exitCode, command).toBe(0);
+      expect(() => decode(result.stdout), command).not.toThrow();
+      for (const subcommand of subcommands[command] ?? []) {
+        const help = run([command, subcommand, "--help"]);
+        expect(help.exitCode, `${command} ${subcommand}`).toBe(0);
+        expect(() => decode(help.stdout), `${command} ${subcommand}`).not.toThrow();
+      }
+    }
+
+    expect(() => decode("examples[1]:\n  malformed")).toThrow();
   });
 
   it("prints top-level help with commands and flags", () => {
