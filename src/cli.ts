@@ -29,17 +29,17 @@ export const DESCRIPTION =
 export const TOP_LEVEL_HELP = `usage: argo-workflows-axi [command] [args] [flags]
 description: ${DESCRIPTION}
 commands[11]:
-  (none): Live home view - target, workflows by phase, failed and running, cron summary
-  triage: What is broken - failed steps with hints and log tails, stuck Pending, suspended crons
-  wf list|get|logs|wait|lint: Read workflows (bounded, failing first)
-  wf submit|retry|resubmit|stop|terminate|suspend|resume: Gated writes (preview unless --apply)
-  cron list|get: Cron workflows; cron suspend|resume: gated writes
-  template list|get|lint: WorkflowTemplates
-  clustertemplate list|get: ClusterWorkflowTemplates
-  archive list|get: Archived workflows (Argo Server mode only)
-  ctx: Offline target view (mode, context or server, namespace, argo version, writable)
-  setup hooks: Install session start and end hooks; context end records command-name memory
-  update: Upgrade argo-workflows-axi
+  - (none): Live home view - target, workflows by phase, failed and running, cron summary
+  - triage: What is broken - failed steps with hints and log tails, stuck Pending, suspended crons
+  - wf list|get|logs|wait|lint: Read workflows (bounded, failing first)
+  - wf submit|retry|resubmit|stop|terminate|suspend|resume: Gated writes (preview unless --apply)
+  - cron list|get: Cron workflows; cron suspend|resume: gated writes
+  - template list|get|lint: WorkflowTemplates
+  - clustertemplate list|get: ClusterWorkflowTemplates
+  - archive list|get: Archived workflows (Argo Server mode only)
+  - ctx: Offline target view (mode, context or server, namespace, argo version, writable)
+  - setup hooks: Install session start and end hooks; context end records command-name memory
+  - update: Upgrade argo-workflows-axi
 flags (after the command, argo's own names):
   -n, --namespace <ns>: Namespace (default: ARGO_NAMESPACE, then the kube context's namespace)
   -A, --all-namespaces: All namespaces (reads only)
@@ -48,10 +48,10 @@ flags (after the command, argo's own names):
   --apply: Run a write; needs -n plus --context (or --argo-server) and a target in ~/.config/argo-workflows-axi/config.json
   --help: Help for any command
 examples[4]:
-  argo-workflows-axi triage
-  argo-workflows-axi wf get @latest
-  argo-workflows-axi wf logs nightly-etl-x7k2p --grep ERROR
-  argo-workflows-axi wf retry nightly-etl-x7k2p
+  - argo-workflows-axi triage
+  - argo-workflows-axi wf get @latest
+  - argo-workflows-axi wf logs nightly-etl-x7k2p --grep ERROR
+  - argo-workflows-axi wf retry nightly-etl-x7k2p
 `;
 
 type Output = Record<string, unknown> | string;
@@ -67,18 +67,18 @@ const NOUNS: Record<string, Noun> = {
     help: `command: argo-workflows-axi wf <subcommand>
 description: Workflows. Reads are bounded; writes preview unless --apply.
 subcommands[12]:
-  list: Workflows, failing and running first
-  get <name|@latest>: Summary plus failed steps
-  logs <name|@latest> [<pod>]: Bounded logs of the failing step
-  wait <name>: Bounded wait (default 120s)
-  lint <file...|->: Validate manifests
-  submit <file|-> | --from <kind>/<name>: Submit (write)
-  retry <name...>: Re-run failed steps (write)
-  resubmit <name...>: New workflow from an old one (write)
-  stop <name...>: Stop, exit handlers run (write)
-  terminate <name...>: Stop now, no exit handlers (write)
-  suspend <name...>: Suspend (write)
-  resume <name...>: Resume (write)
+  - list: Workflows, failing and running first
+  - get <name|@latest>: Summary plus failed steps
+  - logs <name|@latest> optional pod: Bounded logs of the failing step
+  - wait <name>: Bounded wait (default 120s)
+  - lint <file...|->: Validate manifests
+  - submit <file|-> | --from <kind>/<name>: Submit (write)
+  - retry <name...>: Re-run failed steps (write)
+  - resubmit <name...>: New workflow from an old one (write)
+  - stop <name...>: Stop, exit handlers run (write)
+  - terminate <name...>: Stop now, no exit handlers (write)
+  - suspend <name...>: Suspend (write)
+  - resume <name...>: Resume (write)
 help[1]: Run \`argo-workflows-axi wf <subcommand> --help\` for flags and examples
 `,
     subcommands: {
@@ -100,10 +100,10 @@ help[1]: Run \`argo-workflows-axi wf <subcommand> --help\` for flags and example
     help: `command: argo-workflows-axi cron <subcommand>
 description: Cron workflows
 subcommands[4]:
-  list: Schedules, suspended first
-  get <name>: One cron workflow
-  suspend <name...>: Stop scheduling (write)
-  resume <name...>: Resume scheduling (write)
+  - list: Schedules, suspended first
+  - get <name>: One cron workflow
+  - suspend <name...>: Stop scheduling (write)
+  - resume <name...>: Resume scheduling (write)
 help[1]: Run \`argo-workflows-axi cron <subcommand> --help\` for flags and examples
 `,
     subcommands: {
@@ -117,9 +117,9 @@ help[1]: Run \`argo-workflows-axi cron <subcommand> --help\` for flags and examp
     help: `command: argo-workflows-axi template <subcommand>
 description: WorkflowTemplates (read-only)
 subcommands[3]:
-  list: Templates with entrypoint and parameter count
-  get <name>: Entrypoint and input parameters with defaults
-  lint <file...|->: Validate manifests
+  - list: Templates with entrypoint and parameter count
+  - get <name>: Entrypoint and input parameters with defaults
+  - lint <file...|->: Validate manifests
 `,
     subcommands: { list: templateList, get: templateGet, lint: templateLint },
   },
@@ -127,8 +127,8 @@ subcommands[3]:
     help: `command: argo-workflows-axi clustertemplate <subcommand>
 description: ClusterWorkflowTemplates (read-only, cluster-scoped)
 subcommands[2]:
-  list: Templates with entrypoint and parameter count
-  get <name>: Entrypoint and input parameters with defaults
+  - list: Templates with entrypoint and parameter count
+  - get <name>: Entrypoint and input parameters with defaults
 `,
     subcommands: { list: clusterTemplateList, get: clusterTemplateGet },
   },
@@ -136,8 +136,8 @@ subcommands[2]:
     help: `command: argo-workflows-axi archive <subcommand>
 description: Archived workflows (Argo Server mode only)
 subcommands[2]:
-  list: Archived workflows, failing first
-  get <name>: One archived workflow
+  - list: Archived workflows, failing first
+  - get <name>: One archived workflow
 `,
     subcommands: { list: archiveList, get: archiveGet },
   },
@@ -175,7 +175,13 @@ function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
         ? renderPresentation(output)
         : render(output);
     }
-    if (REFUSALS[`${name} ${sub}`]) throw refused(`${name} ${sub}`);
+    if (REFUSALS[`${name} ${sub}`]) {
+      if (rest.includes("--help"))
+        return renderPresentation(
+          `command: argo-workflows-axi ${name} ${sub}\ndescription: Refused operation\n`,
+        );
+      throw refused(`${name} ${sub}`);
+    }
     throw axiError(`Unknown subcommand: ${name} ${sub}`, "VALIDATION_ERROR", [
       `Valid subcommands: ${Object.keys(noun.subcommands).join(", ")}`,
       `Run \`argo-workflows-axi ${name} --help\``,
@@ -184,14 +190,20 @@ function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
 }
 
 function refusedCommand(key: string): AxiCliCommand<undefined> {
-  return async () => {
+  return async (args) => {
+    if (args.includes("--help"))
+      return renderPresentation(
+        `command: argo-workflows-axi ${key}\ndescription: Refused operation\n`,
+      );
     throw refused(key);
   };
 }
 
-function buildCommands(): Record<string, AxiCliCommand<undefined>> {
+export function buildCommands(): Record<string, AxiCliCommand<undefined>> {
   const commands: Record<string, AxiCliCommand<undefined>> = {
     context: rendered(async (args) => {
+      if (args.includes("--help"))
+        return `command: argo-workflows-axi context\ndescription: Internal session context recorder\n`;
       if (args[0] === "end") {
         let payload: unknown;
         try {

@@ -43,8 +43,9 @@ description: What is broken - failed and errored workflows with the failing step
 flags:
   -n, --namespace <ns> | -A, --all-namespaces | --context <name> | -s, --argo-server <host:port>
 examples[2]:
-  argo-workflows-axi triage
-  argo-workflows-axi triage -A
+
+  - argo-workflows-axi triage
+  - argo-workflows-axi triage -A
 `;
 
 const SPEC = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG);

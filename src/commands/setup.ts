@@ -22,9 +22,10 @@ import { parseArgs, requirePositionals } from "../args.js";
 import { axiError } from "../errors.js";
 
 export const SETUP_HELP = `command: argo-workflows-axi setup hooks
- description: Install or repair session hooks, including Claude Code SessionEnd memory
-examples[1]:
-  argo-workflows-axi setup hooks
+description: Install or repair session hooks, including Claude Code SessionEnd memory
+examples[2]:
+  - argo-workflows-axi setup hooks
+  - argo-workflows-axi setup uninstall
 `;
 
 const MARKER = "argo-workflows-axi";

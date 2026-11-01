@@ -147,7 +147,8 @@ description: ${description}. Previews by default; nothing changes without --appl
 flags:
 ${[...flags, "  --apply: Run the write (target must be explicit and in the local allowlist)", TARGET_HELP].join("\n")}
 examples[${examples.length}]:
-${examples.map((e) => `  ${e}`).join("\n")}
+
+${examples.map((e) => `  - ${e}`).join("\n")}
 `;
 }
 

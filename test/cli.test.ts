@@ -1,4 +1,7 @@
+import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
+import { buildCommands } from "../src/cli.js";
+import { REFUSALS } from "../src/registry.js";
 import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
 
 describe("cli basics", () => {
@@ -9,6 +12,58 @@ describe("cli basics", () => {
       expect(result.stdout.trim()).toMatch(/^\d+\.\d+\.\d+$/);
       expect(result.calls).toEqual([]);
     }
+  });
+
+  it("decodes every registered command and subcommand help", () => {
+    const topLevel = run(["--help"]);
+    expect(topLevel.exitCode).toBe(0);
+    expect(() => decode(topLevel.stdout)).not.toThrow();
+
+    const registeredCommands = [...Object.keys(buildCommands()), "update"];
+    expect(registeredCommands).toContain("context");
+    for (const name of registeredCommands) {
+      const result = run([name, "--help"]);
+      expect(result.exitCode, name).toBe(0);
+      expect(() => decode(result.stdout), name).not.toThrow();
+      const subcommands = result.stdout.match(
+        /subcommands\[\d+\]:\n((?: {2}.+\n)+)/,
+      )?.[1];
+      const names =
+        subcommands
+          ?.trimEnd()
+          .split("\n")
+          .map(
+            (line) =>
+              line.trim().replace(/^-\s*/, "").split(":", 1)[0].split(/\s+/)[0],
+          ) ?? [];
+      for (const subcommand of names) {
+        const help = run([name, subcommand, "--help"]);
+        expect(help.exitCode, `${name} ${subcommand}`).toBe(0);
+        expect(
+          () => decode(help.stdout),
+          `${name} ${subcommand}`,
+        ).not.toThrow();
+      }
+    }
+
+    for (const route of [
+      ["context", "end"],
+      ["setup", "hooks"],
+      ["setup", "uninstall"],
+    ]) {
+      const help = run([...route, "--help"]);
+      expect(help.exitCode, route.join(" ")).toBe(0);
+      expect(() => decode(help.stdout), route.join(" ")).not.toThrow();
+    }
+
+    for (const refusal of Object.keys(REFUSALS)) {
+      const help = run([...refusal.split(" "), "--help"]);
+      expect(help.exitCode, refusal).toBe(0);
+      expect(() => decode(help.stdout), refusal).not.toThrow();
+    }
+
+    const brokenHelp = "commands[not-a-count]:\n  - invalid: help\n";
+    expect(() => decode(brokenHelp)).toThrow();
   });
 
   it("prints top-level help with commands and flags", () => {
