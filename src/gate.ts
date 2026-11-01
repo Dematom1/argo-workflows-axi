@@ -18,7 +18,7 @@ import { envServer, type Target } from "./target.js";
 export const APPLY_FLAG = "--apply";
 
 /** Resolve an omitted write target only when the allowlist has one match. */
-export function resolveWriteTarget(target: Target, requireMatch = false): Target {
+export function resolveWriteTarget(target: Target): Target {
   if (
     target.explicit.namespace &&
     (target.explicit.context || target.explicit.server)
@@ -36,7 +36,6 @@ export function resolveWriteTarget(target: Target, requireMatch = false): Target
         : true),
   );
   if (targets.length !== 1) {
-    if (targets.length === 0 && !requireMatch) return target;
     const list = targets.length
       ? targets
           .map((t) => `  ${t.context ? `context=${t.context}` : `server=${t.server}`} namespace=${t.namespace}`)
