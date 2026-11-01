@@ -88,7 +88,7 @@ describe("write gate", () => {
       expect(result.stdout).toContain(
         "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
       );
-      expect(result.calls).toEqual([]);
+      expect(argoCalls(result)).toEqual([]);
     }
   });
 
