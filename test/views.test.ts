@@ -414,6 +414,12 @@ describe("setup hooks", () => {
     expect(settings).toContain("argo-workflows-axi-ctx.js");
     expect(settings).toContain("SessionStart");
     expect(first.calls).toEqual([]);
+
+    const second = run(["setup", "hooks"], { home: first.home });
+    expect(second.exitCode).toBe(0);
+    expect(
+      readFileSync(join(second.home, ".claude", "settings.json"), "utf-8"),
+    ).toBe(settings);
   });
 
   it("rejects malformed hooks without changing settings", async () => {

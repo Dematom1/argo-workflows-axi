@@ -43,6 +43,8 @@ export interface RunOptions {
   stdin?: string;
   /** Contents of ~/.config/argo-workflows-axi/config.json (object is JSON-encoded). */
   config?: unknown;
+  /** Reuse a prior run's HOME. */
+  home?: string;
   /** Initial Claude settings file contents and mode. */
   claudeSettings?: string;
   claudeSettingsMode?: number;
@@ -99,8 +101,8 @@ function fakeBinDir(noKubectl: boolean): string {
 export function run(args: string[], options: RunOptions = {}): RunResult {
   const dir = mkdtempSync(join(tmpdir(), "awf-axi-test-"));
   const fakeBin = fakeBinDir(options.noKubectl ?? false);
-  const home = join(dir, "home");
-  mkdirSync(home);
+  const home = options.home ?? join(dir, "home");
+  mkdirSync(home, { recursive: true });
 
   const configHome = join(home, ".config");
   if (options.config !== undefined) {
