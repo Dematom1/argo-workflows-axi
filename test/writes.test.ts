@@ -57,7 +57,7 @@ describe("write gate", () => {
       config: { writableTargets: [{ server: "localhost:2746", namespace: "argo" }] },
       env: { ARGO_SERVER: "localhost:2746" },
     });
-    expect(server.stdout).toContain("server: localhost:2746");
+    expect(server.stdout).toContain('server: "localhost:2746"');
     expect(server.stdout).toContain("defaulted: true");
     expect(server.stdout).toContain("--argo-server localhost:2746 -n argo --apply");
 
