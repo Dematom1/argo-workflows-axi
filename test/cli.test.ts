@@ -17,20 +17,20 @@ describe("cli basics", () => {
     expect(topLevel.exitCode).toBe(0);
     expect(() => decode(topLevel.stdout)).not.toThrow();
 
-    const commands = topLevel.stdout.match(/commands\\[\\d+\\]:\\n((?:  .+\\n)+)/)?.[1];
+    const commands = topLevel.stdout.match(/commands\[\d+\]:\n((?:  .+\n)+)/)?.[1];
     expect(commands).toBeDefined();
-    for (const row of commands!.trimEnd().split("\\n")) {
-      const [name, ...listedSubs] = row.trim().split(":", 1)[0].split(/\\s+/);
+    for (const row of commands!.trimEnd().split("\n")) {
+      const [name] = row.trim().split(":", 1)[0].split(/\s+/);
       if (name === "update" || name === "(none)") continue;
 
       const result = run([name, "--help"]);
       expect(result.exitCode, name).toBe(0);
       expect(() => decode(result.stdout), name).not.toThrow();
-      const subcommands = result.stdout.match(/subcommands\\[\\d+\\]:\\n((?:  .+\\n)+)/)?.[1];
+      const subcommands = result.stdout.match(/subcommands\[\d+\]:\n((?:  .+\n)+)/)?.[1];
       if (!subcommands) continue;
 
-      const names = subcommands.trimEnd().split("\\n").map((line) =>
-        line.trim().split(":", 1)[0].split(/\\s+/)[0],
+      const names = subcommands.trimEnd().split("\n").map((line) =>
+        line.trim().split(":", 1)[0].split(/\s+/)[0],
       );
       for (const subcommand of names) {
         const help = run([name, subcommand, "--help"]);
