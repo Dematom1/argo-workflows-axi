@@ -496,7 +496,13 @@ describe("idempotent resubmit", () => {
     const next = run(runArgs(["--new"]), {
       responses: [
         ...begin,
-        { match: ["list"], stdout: json([createdWorkflow("0")]) },
+        {
+          match: ["list"],
+          stdout: json([
+            createdWorkflow("0"),
+            createdWorkflow("not-a-number"),
+          ]),
+        },
         {
           match: ["get"],
           stderr:

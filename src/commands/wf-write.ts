@@ -519,14 +519,14 @@ async function applyResubmits(
           )
         : [];
       const generation = hasFlag(parsed, "--new")
-        ? prior.reduce(
-            (max, wf) =>
-              Math.max(
-                max,
-                Number(wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL] ?? -1),
-              ),
-            -1,
-          ) + 1
+        ? prior.reduce((max, wf) => {
+            const generation = Number(
+              wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL],
+            );
+            return Number.isSafeInteger(generation) && generation >= 0
+              ? Math.max(max, generation)
+              : max;
+          }, -1) + 1
         : 0;
       const idempotencyKey =
         flagValue(parsed, "--key") ?? `${source.metadata.uid}:${generation}`;
