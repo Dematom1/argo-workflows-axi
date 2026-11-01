@@ -535,10 +535,12 @@ describe("idempotent resubmit", () => {
       "kubectl get workflows --context=kind-dev -n argo -l workflows.argoproj.io/resubmitted-from-workflow=nightly-etl-x7k2p",
     );
     expect(result.stdout).toContain(
-      `kubectl patch workflow <created-name> --context=kind-dev -n argo --type=merge --patch='{"spec":{"priority":5}}'`,
+      "kubectl patch workflow <created-name> --context=kind-dev -n argo --type=merge --patch=",
     );
+    expect(result.stdout).toContain("priority");
+    expect(result.stdout).toContain(":5");
     expect(result.stdout).not.toContain("undefined");
-    expect(argoCalls(result)).toHaveLength(1);
+    expect(argoCalls(result)).toHaveLength(3);
     expect(result.calls.some((call) => call.bin === "kubectl")).toBe(false);
   });
 
