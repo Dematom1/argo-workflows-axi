@@ -109,6 +109,52 @@ describe("triage", () => {
     );
   });
 
+  it("guides from the refetched workflow when listed nodes are offloaded", () => {
+    const listed = d.failedEtl() as {
+      status: { nodes: Record<string, unknown> };
+    };
+    listed.status.nodes = {};
+    const fetched = d.failedEtl();
+    fetched.status!.message = "x".repeat(500);
+    const result = run(["triage"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["cron", "list"], stdout: "" },
+        { match: ["list", "--output=json"], stdout: json([listed]) },
+        { match: ["get", "nightly-etl-x7k2p"], stdout: json(fetched) },
+        { match: ["logs"], stdout: "" },
+      ],
+    });
+    expect(result.stdout).toContain("truncated, 500 chars total");
+    expect(result.stdout).toContain(
+      "Run `argo-workflows-axi wf get nightly-etl-x7k2p --full`",
+    );
+  });
+
+  it("keeps synthesized stuck reasons untruncated", () => {
+    const wf = d.runningIngest() as {
+      status: { nodes: Record<string, Record<string, unknown>> };
+    };
+    wf.status.nodes.pending = {
+      id: "pending",
+      name: "ingest-q9w8e.pending",
+      displayName: "pending",
+      type: "Pod",
+      phase: "Pending",
+      startedAt: d.ago(600),
+      message: "x".repeat(300),
+    };
+    const result = run(["triage"], {
+      responses: [
+        ...KUBE_DEFAULTS,
+        { match: ["cron", "list"], stdout: "" },
+        { match: ["list", "--output=json"], stdout: json([wf]) },
+      ],
+    });
+    expect(result.stdout).toContain(`: ${"x".repeat(300)}`);
+    expect(result.stdout).not.toContain("truncated");
+  });
+
   it("ignores failures outside the window and says nothing is broken", () => {
     const old = d.failedEtl() as { status: Record<string, unknown> };
     old.status.finishedAt = d.ago(3 * 86400);
