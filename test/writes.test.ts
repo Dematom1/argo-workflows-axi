@@ -484,6 +484,62 @@ describe("idempotent resubmit", () => {
     expect(deliberate.stdout).toContain("memoized; not retry-safe");
   });
 
+  it("rejects memoized priority in Argo Server mode before writes", () => {
+    for (const apply of [false, true]) {
+      const result = run(
+        [
+          "wf",
+          "resubmit",
+          "nightly-etl-x7k2p",
+          "--memoized",
+          "--new",
+          "--priority",
+          "5",
+          "--argo-server",
+          "argo.example.internal:2746",
+          "-n",
+          "argo",
+          ...(apply ? ["--apply"] : []),
+        ],
+        {
+          responses: begin,
+          config: {
+            writableTargets: [
+              { server: "argo.example.internal:2746", namespace: "argo" },
+            ],
+          },
+        },
+      );
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain("VALIDATION_ERROR");
+      expect(result.stdout).toContain("Kubernetes mode");
+      expect(writeCalls(result)).toEqual([]);
+    }
+  });
+
+  it("reports an actionable remedy when the memoized priority patch fails", () => {
+    const result = run(runArgs(["--memoized", "--new", "--priority", "5"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json(createdWorkflow()) },
+        {
+          bin: "kubectl",
+          match: ["patch", "workflow"],
+          stderr: "patch rejected",
+          exit: 1,
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout).toContain(resultName);
+    expect(result.stdout).toContain("priority 5 was not applied");
+    expect(result.stdout).toContain(
+      `Remedy: kubectl --context=kind-dev -n argo patch workflow ${resultName} --type=merge`,
+    );
+    expect(result.stdout).not.toContain("undefined");
+  });
+
   it("uses --key and --new to choose deterministic generations", () => {
     const custom = run(runArgs(["--key", "customer-run"]), {
       responses: [
