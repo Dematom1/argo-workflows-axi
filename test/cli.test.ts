@@ -44,7 +44,16 @@ describe("cli basics", () => {
           `${name} ${subcommand}`,
         ).not.toThrow();
       }
+    }
 
+    for (const route of [
+      ["context", "end"],
+      ["setup", "hooks"],
+      ["setup", "uninstall"],
+    ]) {
+      const help = run([...route, "--help"]);
+      expect(help.exitCode, route.join(" ")).toBe(0);
+      expect(() => decode(help.stdout), route.join(" ")).not.toThrow();
     }
 
     for (const refusal of Object.keys(REFUSALS)) {
