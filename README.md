@@ -77,7 +77,7 @@ You only need one of these.
 | `cron list\|get`, `template list\|get\|lint`, `clustertemplate list\|get` | Cron workflows and templates (template `get` shows input parameters with defaults)                                   |
 | `archive list\|get`                                                       | Archived workflows (Argo Server mode only)                                                                           |
 | `ctx`                                                                     | Offline target view                                                                                                  |
-| `setup hooks`                                                             | Install session hooks; `setup uninstall` removes them                                                                |
+| `setup hooks`                                                             | Install hooks; report installed, already installed, or stale per provider; uninstall removes them                    |
 | `update`                                                                  | Upgrade the tool                                                                                                     |
 
 Writes (preview unless `--apply`): `wf submit`, `wf retry`, `wf resubmit`, `wf stop`, `wf terminate`, `wf suspend`, `wf resume`, `cron suspend`, `cron resume`.
