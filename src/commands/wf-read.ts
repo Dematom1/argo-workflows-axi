@@ -750,7 +750,7 @@ flags:
 examples[2]:
 
   - argo-workflows-axi wf lint my-wf.yaml
-  cat my-wf.yaml | argo-workflows-axi wf lint -
+  - cat my-wf.yaml | argo-workflows-axi wf lint -
 `;
 
 /**
