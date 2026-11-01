@@ -118,11 +118,11 @@ function writeSettings(path: string, settings: Settings): void {
   }
 }
 function hookStatus(wasInstalled: boolean, isInstalled: boolean): string {
-  return wasInstalled
-    ? "already installed"
-    : isInstalled
-      ? "installed"
-      : "stale";
+  return isInstalled
+    ? wasInstalled
+      ? "already installed"
+      : "installed"
+    : "stale";
 }
 function ctxEntrypoint(): string {
   const main = realpathSync(process.argv[1] ?? "");
