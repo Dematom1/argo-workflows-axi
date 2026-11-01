@@ -48,10 +48,11 @@ flags (after the command, argo's own names):
   --apply: Run a write; needs -n plus --context (or --argo-server) and a target in ~/.config/argo-workflows-axi/config.json
   --help: Help for any command
 examples[4]:
-  argo-workflows-axi triage
-  argo-workflows-axi wf get @latest
-  argo-workflows-axi wf logs nightly-etl-x7k2p --grep ERROR
-  argo-workflows-axi wf retry nightly-etl-x7k2p
+
+  - argo-workflows-axi triage
+  - argo-workflows-axi wf get @latest
+  - argo-workflows-axi wf logs nightly-etl-x7k2p --grep ERROR
+  - argo-workflows-axi wf retry nightly-etl-x7k2p
 `;
 
 type Output = Record<string, unknown> | string;

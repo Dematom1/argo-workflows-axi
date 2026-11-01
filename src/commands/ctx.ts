@@ -24,8 +24,9 @@ flags:
   -s, --argo-server <host:port>: Argo Server to describe
   -n, --namespace <ns>: Namespace to describe
 examples[2]:
-  argo-workflows-axi ctx
-  argo-workflows-axi ctx --context kind-dev -n argo
+
+  - argo-workflows-axi ctx
+  - argo-workflows-axi ctx --context kind-dev -n argo
 `;
 
 function parseVersion(text: string): string | undefined {

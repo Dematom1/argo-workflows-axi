@@ -57,8 +57,9 @@ flags:
   -l, --selector <sel>: Label selector
 ${LIST_TARGET_LINE}
 examples[2]:
-  argo-workflows-axi cron list
-  argo-workflows-axi cron list -A
+
+  - argo-workflows-axi cron list
+  - argo-workflows-axi cron list -A
 `;
 
 export const CRON_GET_HELP = `command: argo-workflows-axi cron get <name>
@@ -67,7 +68,8 @@ flags:
   --full: Untruncated condition messages
 ${TARGET_LINE}
 examples[1]:
-  argo-workflows-axi cron get nightly-etl
+
+  - argo-workflows-axi cron get nightly-etl
 `;
 
 export async function cronList(args: string[]): Promise<Output> {
@@ -180,8 +182,9 @@ flags:
   -l, --selector <sel>: Label selector
 ${LIST_TARGET_LINE}
 examples[2]:
-  argo-workflows-axi template list
-  argo-workflows-axi template list -A
+
+  - argo-workflows-axi template list
+  - argo-workflows-axi template list -A
 `;
 
 export const TEMPLATE_GET_HELP = `command: argo-workflows-axi template get <name>
@@ -189,7 +192,8 @@ description: One WorkflowTemplate - entrypoint, input parameters with defaults, 
 flags:
 ${TARGET_LINE}
 examples[1]:
-  argo-workflows-axi template get nightly-etl
+
+  - argo-workflows-axi template get nightly-etl
 `;
 
 export const TEMPLATE_LINT_HELP = `command: argo-workflows-axi template lint <file...|->
@@ -197,7 +201,8 @@ description: Validate WorkflowTemplate manifests (read-only)
 flags:
 ${TARGET_LINE}
 examples[1]:
-  argo-workflows-axi template lint nightly-etl.yaml
+
+  - argo-workflows-axi template lint nightly-etl.yaml
 `;
 
 export const CLUSTERTEMPLATE_LIST_HELP = `command: argo-workflows-axi clustertemplate list
@@ -205,7 +210,8 @@ description: ClusterWorkflowTemplates (cluster-scoped) with their entrypoint and
 flags:
   --context <name> | -s, --argo-server <host:port>
 examples[1]:
-  argo-workflows-axi clustertemplate list
+
+  - argo-workflows-axi clustertemplate list
 `;
 
 export const CLUSTERTEMPLATE_GET_HELP = `command: argo-workflows-axi clustertemplate get <name>
@@ -213,7 +219,8 @@ description: One ClusterWorkflowTemplate - entrypoint, input parameters with def
 flags:
   --context <name> | -s, --argo-server <host:port>
 examples[1]:
-  argo-workflows-axi clustertemplate get shared-build
+
+  - argo-workflows-axi clustertemplate get shared-build
 `;
 
 function templateRows(list: WorkflowTemplate[], withNamespace: boolean) {
@@ -355,8 +362,9 @@ flags:
   --limit <n>: Rows to show (default 50, max 1000)
 ${TARGET_LINE}
 examples[2]:
-  argo-workflows-axi archive list
-  argo-workflows-axi archive list -l workflows.argoproj.io/phase=Failed
+
+  - argo-workflows-axi archive list
+  - argo-workflows-axi archive list -l workflows.argoproj.io/phase=Failed
 `;
 
 export const ARCHIVE_GET_HELP = `command: argo-workflows-axi archive get <name>
@@ -364,7 +372,8 @@ description: One archived workflow (Argo Server mode only)
 flags:
 ${TARGET_LINE}
 examples[1]:
-  argo-workflows-axi archive get nightly-etl-x7k2p
+
+  - argo-workflows-axi archive get nightly-etl-x7k2p
 `;
 
 async function requireServerMode(parsed: ReturnType<typeof parseArgs>) {

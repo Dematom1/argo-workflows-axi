@@ -79,9 +79,10 @@ flags:
   --fields <list>: Extra columns (${LIST_FIELDS.join(", ")})
   -n, --namespace <ns> | -A, --all-namespaces | --context <name> | -s, --argo-server <host:port>
 examples[3]:
-  argo-workflows-axi wf list
-  argo-workflows-axi wf list --status Failed,Error --since 1d
-  argo-workflows-axi wf list -A --prefix nightly- --fields duration,template
+
+  - argo-workflows-axi wf list
+  - argo-workflows-axi wf list --status Failed,Error --since 1d
+  - argo-workflows-axi wf list -A --prefix nightly- --fields duration,template
 `;
 
 const LIST_SPEC = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG, {
@@ -281,9 +282,10 @@ flags:
   --full: Untruncated messages, ISO timestamps, labels and annotations
   -n, --namespace <ns> | --context <name> | -s, --argo-server <host:port>
 examples[3]:
-  argo-workflows-axi wf get nightly-etl-x7k2p
-  argo-workflows-axi wf get @latest
-  argo-workflows-axi wf get nightly-etl-x7k2p --tree
+
+  - argo-workflows-axi wf get nightly-etl-x7k2p
+  - argo-workflows-axi wf get @latest
+  - argo-workflows-axi wf get nightly-etl-x7k2p --tree
 `;
 
 const GET_SPEC = mergeSpecs(TARGET_FLAGS, {
@@ -478,9 +480,10 @@ flags:
   -c, --container <name>: Container (default main)
   -n, --namespace <ns> | --context <name> | -s, --argo-server <host:port>
 examples[3]:
-  argo-workflows-axi wf logs nightly-etl-x7k2p
-  argo-workflows-axi wf logs @latest --grep ERROR
-  argo-workflows-axi wf logs nightly-etl-x7k2p nightly-etl-x7k2p-load-123456 --tail 300
+
+  - argo-workflows-axi wf logs nightly-etl-x7k2p
+  - argo-workflows-axi wf logs @latest --grep ERROR
+  - argo-workflows-axi wf logs nightly-etl-x7k2p nightly-etl-x7k2p-load-123456 --tail 300
 `;
 
 const LOGS_SPEC = mergeSpecs(TARGET_FLAGS, {
@@ -657,8 +660,9 @@ flags:
   --timeout <dur>: How long to wait (default 120s, max 10m)
   -n, --namespace <ns> | --context <name> | -s, --argo-server <host:port>
 examples[2]:
-  argo-workflows-axi wf wait nightly-etl-x7k2p
-  argo-workflows-axi wf wait nightly-etl-x7k2p --timeout 5m
+
+  - argo-workflows-axi wf wait nightly-etl-x7k2p
+  - argo-workflows-axi wf wait nightly-etl-x7k2p --timeout 5m
 `;
 
 const WAIT_SPEC = mergeSpecs(TARGET_FLAGS, { value: ["--timeout"] });
@@ -744,7 +748,8 @@ description: Validate workflow manifests before submitting (read-only; asks the 
 flags:
   -n, --namespace <ns> | --context <name> | -s, --argo-server <host:port>
 examples[2]:
-  argo-workflows-axi wf lint my-wf.yaml
+
+  - argo-workflows-axi wf lint my-wf.yaml
   cat my-wf.yaml | argo-workflows-axi wf lint -
 `;
 
