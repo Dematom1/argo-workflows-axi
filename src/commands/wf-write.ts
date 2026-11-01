@@ -735,7 +735,10 @@ async function runNamedWrite<T>(
   // Validates flag values (e.g. --parameter, --priority) before any call.
   const argoArgs = spec.argoArgs(parsed);
 
-  const target = resolveWriteTarget(await resolveTarget(parsed));
+  const target = resolveWriteTarget(
+    await resolveTarget(parsed),
+    hasFlag(parsed, APPLY_FLAG),
+  );
   if (
     spec.op === "wf.resubmit" &&
     hasFlag(parsed, "--memoized") &&
@@ -1209,7 +1212,10 @@ export async function wfSubmit(args: string[]): Promise<Output> {
     );
   }
   const priority = validatePriority(parsed);
-  const target = resolveWriteTarget(await resolveTarget(parsed));
+  const target = resolveWriteTarget(
+    await resolveTarget(parsed),
+    hasFlag(parsed, APPLY_FLAG),
+  );
   const forward = target.defaulted
     ? target.mode === "argo-server"
       ? { server: target.server, namespace: target.namespace }
