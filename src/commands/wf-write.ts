@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +10,7 @@ import {
   type Document,
   type Scalar,
   type YAMLMap,
+  stringify,
 } from "yaml";
 import {
   TARGET_FLAGS,
@@ -46,6 +48,7 @@ import {
   COMPLETED_PHASES,
   FAILED_PHASES,
   fetchWorkflow,
+  fetchWorkflows,
   isSuspended,
   phaseOf,
   type Parameter,
@@ -330,22 +333,25 @@ export const WRITES: Record<
     verb: "resubmit",
     done: "resubmitted",
     flags: mergeSpecs(WRITE_FLAGS, {
-      value: ["--priority"],
+      value: ["--priority", "--key"],
       repeatable: ["--parameter"],
-      bool: ["--memoized"],
+      bool: ["--memoized", "--new"],
       aliases: { "-p": "--parameter" },
     }),
     help: usageHelp(
       "wf resubmit <name...>",
-      "Create a new workflow from an existing one (not idempotent: each --apply creates another)",
+      "Create an idempotent copy of a workflow; retries reuse it unless --new is passed",
       [
-        "  --memoized: Re-use successful steps (needs a Failed or Error workflow)",
+        "  --key <key>: Idempotency key; retries with the same key reuse the workflow",
+        "  --new: Create the next resubmit generation",
+        "  --memoized: Re-use successful steps; requires --new and a Failed or Error workflow (not retry-safe)",
         "  -p, --parameter <k=v>: Override a global parameter (repeatable)",
         "  --priority <n>: Workflow priority",
       ],
       [
         "argo-workflows-axi wf resubmit nightly-etl-x7k2p",
-        "argo-workflows-axi wf resubmit nightly-etl-x7k2p --memoized --context kind-dev -n argo --apply",
+        "argo-workflows-axi wf resubmit nightly-etl-x7k2p --memoized --new --context kind-dev -n argo --apply",
+        "argo-workflows-axi wf resubmit nightly-etl-x7k2p --new --context kind-dev -n argo --apply",
       ],
     ),
     fetch: fetchWf,
@@ -357,9 +363,26 @@ export const WRITES: Record<
           phase,
         };
       }
-      return { change: "create a new workflow from this one", phase };
+      return {
+        change: hasFlag(parsed, "--memoized")
+          ? "create another workflow with Argo memoization (not retry-safe)"
+          : "create or reuse a deterministic workflow copy",
+        phase,
+      };
     },
     argoArgs: (parsed) => {
+      if (hasFlag(parsed, "--memoized") && !hasFlag(parsed, "--new")) {
+        throw axiError(
+          "--memoized requires --new because Argo's native memoized resubmit is not retry-safe",
+          "VALIDATION_ERROR",
+        );
+      }
+      if (hasFlag(parsed, "--new") && flagValue(parsed, "--key")) {
+        throw axiError(
+          "--new cannot be combined with --key",
+          "VALIDATION_ERROR",
+        );
+      }
       const priority = flagValue(parsed, "--priority");
       if (priority !== undefined && !/^-?\d+$/.test(priority)) {
         throw axiError("--priority must be a whole number", "VALIDATION_ERROR");
@@ -374,6 +397,10 @@ export const WRITES: Record<
       const priority = flagValue(parsed, "--priority");
       return [
         ...(hasFlag(parsed, "--memoized") ? ["--memoized"] : []),
+        ...(hasFlag(parsed, "--new") ? ["--new"] : []),
+        ...(flagValue(parsed, "--key")
+          ? [`--key ${shellQuote(flagValue(parsed, "--key")!)}`]
+          : []),
         ...(priority !== undefined ? [`--priority ${priority}`] : []),
         ...echoParameters(parsed),
       ];
@@ -433,6 +460,204 @@ interface Row {
   plan: Plan;
 }
 
+const RESUBMIT_SOURCE_LABEL = "axi.argoproj.io/resubmit-source";
+const RESUBMIT_KEY_LABEL = "axi.argoproj.io/resubmit-key";
+const RESUBMIT_GENERATION_LABEL = "axi.argoproj.io/resubmit-generation";
+
+function shortHash(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 20);
+}
+
+async function applyResubmits(
+  gate: GateDecision,
+  target: Target,
+  forward: ReturnType<typeof forwardTarget>,
+  rows: Row[],
+  parsed: ParsedArgs,
+): Promise<Output> {
+  const results: Array<Record<string, string>> = [];
+  let failures = 0;
+  const suffix = targetSuffix(parsed);
+  for (const row of rows) {
+    if (row.plan.blocked) {
+      failures += 1;
+      results.push({
+        name: row.name,
+        result: `failed - ${row.plan.blocked}`,
+        phase: row.phase,
+      });
+      continue;
+    }
+    try {
+      const source = await fetchWorkflow(row.name, forward);
+      if (hasFlag(parsed, "--memoized")) {
+        const { stdout } = await runWrite(
+          "wf.resubmit-native",
+          [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
+          gate.approval!,
+          { target: forward },
+        );
+        const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
+        const name = resubmitted?.metadata.name ?? "(unknown)";
+        results.push({
+          name,
+          result: `created ${name} (memoized; not retry-safe)`,
+          phase: resubmitted ? phaseOf(resubmitted) : "Pending",
+        });
+        continue;
+      }
+      if (!source.metadata.uid)
+        throw axiError(
+          "Source workflow has no uid; cannot derive an idempotency key",
+          "INVALID_REQUEST",
+        );
+      const sourceId = shortHash(source.metadata.uid);
+      const prior = hasFlag(parsed, "--new")
+        ? await fetchWorkflows(
+            [`--selector=${RESUBMIT_SOURCE_LABEL}=${sourceId}`],
+            forward,
+          )
+        : [];
+      const generation = hasFlag(parsed, "--new")
+        ? prior.reduce((max, wf) => {
+            const generation = Number(
+              wf.metadata.labels?.[RESUBMIT_GENERATION_LABEL],
+            );
+            return Number.isSafeInteger(generation) && generation >= 0
+              ? Math.max(max, generation)
+              : max;
+          }, -1) + 1
+        : 0;
+      const idempotencyKey =
+        flagValue(parsed, "--key") ?? `${source.metadata.uid}:${generation}`;
+      const keyHash = shortHash(idempotencyKey);
+      const name = `${row.name.slice(0, 228)}-rs-${keyHash}`;
+      const assertMatchingIdentity = (workflow: Workflow) => {
+        if (
+          workflow.metadata.labels?.[RESUBMIT_KEY_LABEL] !== keyHash ||
+          workflow.metadata.labels?.[RESUBMIT_SOURCE_LABEL] !== sourceId
+        )
+          throw axiError(
+            `Deterministic name ${name} is taken by an unrelated workflow`,
+            "INVALID_REQUEST",
+          );
+      };
+      const labels = Object.fromEntries(
+        Object.entries(source.metadata.labels ?? {}).filter(
+          ([key]) =>
+            ![
+              "workflows.argoproj.io/phase",
+              "workflows.argoproj.io/completed",
+              "workflows.argoproj.io/workflow-archiving-status",
+              "workflows.argoproj.io/creator",
+              "workflows.argoproj.io/creator-email",
+              "workflows.argoproj.io/creator-preferred-username",
+            ].includes(key),
+        ),
+      );
+      const spec = structuredClone(source.spec ?? {});
+      if (spec.shutdown) spec.shutdown = "";
+      Object.assign(labels, {
+        [RESUBMIT_SOURCE_LABEL]: sourceId,
+        [RESUBMIT_KEY_LABEL]: keyHash,
+        [RESUBMIT_GENERATION_LABEL]: String(generation),
+        "workflows.argoproj.io/previous-workflow": row.name,
+      });
+      let existing: Workflow | undefined;
+      try {
+        existing = await fetchWorkflow(name, forward);
+      } catch (error) {
+        if (errorCode(error) !== "NOT_FOUND") throw error;
+      }
+      if (existing) {
+        assertMatchingIdentity(existing);
+        results.push({
+          name,
+          result: `reused existing ${name}`,
+          phase: phaseOf(existing),
+        });
+        continue;
+      }
+      for (const parameter of flagValues(parsed, "--parameter")) {
+        const eq = parameter.indexOf("=");
+        const key = parameter.slice(0, eq);
+        const found = spec.arguments?.parameters?.find((p) => p.name === key);
+        if (found) found.value = parameter.slice(eq + 1);
+        else
+          (spec.arguments ??= {}).parameters = [
+            ...(spec.arguments?.parameters ?? []),
+            { name: key, value: parameter.slice(eq + 1) },
+          ];
+      }
+      const priority = flagValue(parsed, "--priority");
+      const workflow = {
+        apiVersion: "argoproj.io/v1alpha1",
+        kind: "Workflow",
+        metadata: {
+          name,
+          namespace: target.namespace,
+          labels,
+          annotations: source.metadata.annotations,
+        },
+        spec,
+      };
+      if (priority !== undefined)
+        (workflow.spec as Record<string, unknown>).priority = Number(priority);
+      const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-resubmit-"));
+      const path = join(dir, "workflow.yaml");
+      try {
+        writeFileSync(path, stringify(workflow), { mode: 0o600 });
+        try {
+          await runWrite(
+            "wf.resubmit",
+            [
+              path,
+              `--name=${name}`,
+              `--labels=${RESUBMIT_KEY_LABEL}=${keyHash}`,
+              "--output=json",
+            ],
+            gate.approval!,
+            { target: forward },
+          );
+          results.push({ name, result: `created ${name}`, phase: "Pending" });
+        } catch (error) {
+          if (errorCode(error) !== "ALREADY_EXISTS") throw error;
+          const reused = await fetchWorkflow(name, forward);
+          assertMatchingIdentity(reused);
+          results.push({
+            name,
+            result: `reused existing ${name}`,
+            phase: phaseOf(reused),
+          });
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    } catch (error) {
+      failures += 1;
+      results.push({
+        name: row.name,
+        result: `failed - ${errorCode(error) ?? "UNKNOWN"}: ${errorMessage(error)}`,
+        phase: row.phase,
+      });
+    }
+  }
+  const out: Record<string, unknown> = {
+    action: "wf resubmit",
+    target: targetLine(target),
+    results,
+    help: [
+      `Run \`argo-workflows-axi wf get <name>${suffix}\` to check progress`,
+    ],
+  };
+  if (failures > 0) {
+    out.error = `${failures} of ${rows.length} resubmit operations failed`;
+    out.code = "WRITE_FAILED";
+    process.exitCode = 1;
+  }
+  return out;
+}
+
 function targetLine(target: Target): string {
   return describeTarget(target);
 }
@@ -472,7 +697,11 @@ async function runNamedWrite<T>(
     ...names,
     ...spec.echoArgs(parsed),
   ].join(" ");
-  const gate = checkWrite(spec.op, parsed, target, command);
+  const writeOp =
+    spec.op === "wf.resubmit" && hasFlag(parsed, "--memoized")
+      ? "wf.resubmit-native"
+      : spec.op;
+  const gate = checkWrite(writeOp, parsed, target, command);
   const forward = forwardTarget(parsed);
 
   const rows: Row[] = [];
@@ -541,6 +770,9 @@ async function applyOutput<T>(
   forward: ReturnType<typeof forwardTarget>,
   parsed: ParsedArgs,
 ): Promise<Output> {
+  if (spec.op === "wf.resubmit") {
+    return applyResubmits(gate, target, forward, rows, parsed);
+  }
   const results: Array<Record<string, string>> = [];
   let failures = 0;
   for (const row of rows) {

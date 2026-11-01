@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -297,6 +298,235 @@ describe("write gate", () => {
   });
 });
 
+describe("idempotent resubmit", () => {
+  const source = d.failedEtl();
+  const uid = source.metadata.uid as string;
+  const hash = (value: string) =>
+    createHash("sha256").update(value).digest("hex").slice(0, 20);
+  const resultName = `nightly-etl-x7k2p-rs-${hash(`${uid}:0`)}`;
+  const createdWorkflow = (generation = "0", key = hash(`${uid}:0`)) => ({
+    metadata: {
+      name: resultName,
+      namespace: "argo",
+      uid: "copy-uid",
+      labels: {
+        "axi.argoproj.io/resubmit-source": hash(uid),
+        "axi.argoproj.io/resubmit-key": key,
+        "axi.argoproj.io/resubmit-generation": generation,
+      },
+    },
+    spec: source.spec,
+    status: { phase: "Running" },
+  });
+  const begin = [
+    ...KUBE_DEFAULTS,
+    { match: ["get", "nightly-etl-x7k2p"], stdout: json(source) },
+  ];
+  const miss = {
+    match: ["get", resultName],
+    stderr: "Error: rpc error: code = NotFound desc = workflow not found\\n",
+    exit: 1,
+  };
+  const prior = { match: ["list"], stdout: "[]" };
+  const runArgs = (args: string[]) => [
+    "wf",
+    "resubmit",
+    "nightly-etl-x7k2p",
+    ...EXPLICIT,
+    ...args,
+    "--apply",
+  ];
+
+  it("creates with a stable name and idempotency label; retry reuses it", () => {
+    const first = run(runArgs([]), {
+      responses: [...begin, prior, miss, { match: ["submit"], stdout: "{}" }],
+      config: ALLOW,
+    });
+    expect(first.exitCode).toBe(0);
+    expect(first.stdout).toContain(`created ${resultName}`);
+    const submit = first.calls.find((call) => call.argv[0] === "submit");
+    expect(submit?.argv).toContain(`--name=${resultName}`);
+    expect(submit?.files).toBeDefined();
+    expect(Object.values(submit?.files ?? {}).join("\\n")).toContain(
+      `name: ${resultName}`,
+    );
+    expect(Object.values(submit?.files ?? {}).join("\\n")).toContain(
+      `axi.argoproj.io/resubmit-key: ${hash(`${uid}:0`)}`,
+    );
+
+    const retry = run(runArgs([]), {
+      responses: [
+        ...begin,
+        prior,
+        { match: ["get", resultName], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(retry.exitCode).toBe(0);
+    expect(retry.stdout).toContain(`reused existing ${resultName}`);
+    expect(writeCalls(retry)).toEqual([]);
+
+    const unrelated = (workflow: ReturnType<typeof createdWorkflow>) => ({
+      ...workflow,
+      metadata: {
+        ...workflow.metadata,
+        labels: {
+          ...workflow.metadata.labels,
+          "axi.argoproj.io/resubmit-source": "other-source",
+        },
+      },
+    });
+    const nameTaken = run(runArgs([]), {
+      responses: [
+        ...begin,
+        prior,
+        {
+          match: ["get", resultName],
+          stdout: json(unrelated(createdWorkflow())),
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(nameTaken.exitCode).toBe(1);
+    expect(nameTaken.stdout).toContain("is taken by an unrelated workflow");
+
+    const createRace = run(runArgs([]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", resultName],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+          times: 1,
+        },
+        {
+          match: ["submit"],
+          stderr:
+            "Error: rpc error: code = AlreadyExists desc = workflows already exists\\n",
+          exit: 1,
+        },
+        { match: ["get", resultName], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(createRace.exitCode).toBe(0);
+    expect(createRace.stdout).toContain(`reused existing ${resultName}`);
+
+    const unrelatedRace = run(runArgs([]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", resultName],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+          times: 1,
+        },
+        {
+          match: ["submit"],
+          stderr:
+            "Error: rpc error: code = AlreadyExists desc = workflows already exists\\n",
+          exit: 1,
+        },
+        {
+          match: ["get", resultName],
+          stdout: json(unrelated(createdWorkflow())),
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(unrelatedRace.exitCode).toBe(1);
+    expect(unrelatedRace.stdout).toContain("is taken by an unrelated workflow");
+  });
+
+  it("requires --new for native memoized resubmit", () => {
+    const unsafe = run(runArgs(["--memoized"]), {
+      responses: begin,
+      config: ALLOW,
+    });
+    expect(unsafe.exitCode).toBe(2);
+    expect(unsafe.stdout).toContain("--memoized requires --new");
+    expect(argoCalls(unsafe)).toEqual([]);
+
+    const deliberate = run(runArgs(["--memoized", "--new"]), {
+      responses: [
+        ...begin,
+        { match: ["resubmit"], stdout: json(createdWorkflow()) },
+      ],
+      config: ALLOW,
+    });
+    expect(deliberate.exitCode).toBe(0);
+    expect(writeCalls(deliberate)[0]).toEqual([
+      "resubmit",
+      "nightly-etl-x7k2p",
+      "--memoized",
+      "--output=json",
+      "--context=kind-dev",
+      "--namespace=argo",
+      "--loglevel=error",
+    ]);
+    expect(deliberate.stdout).toContain("memoized; not retry-safe");
+  });
+
+  it("uses --key and --new to choose deterministic generations", () => {
+    const custom = run(runArgs(["--key", "customer-run"]), {
+      responses: [
+        ...begin,
+        prior,
+        {
+          match: ["get"],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+        },
+        { match: ["submit"] },
+      ],
+      config: ALLOW,
+    });
+    const customName = `nightly-etl-x7k2p-rs-${hash("customer-run")}`;
+    expect(custom.stdout).toContain(`created ${customName}`);
+    expect(
+      custom.calls.find((call) => call.argv[0] === "submit")?.argv,
+    ).toContain(`--name=${customName}`);
+    const customRetry = run(runArgs(["--key", "customer-run"]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", customName],
+          stdout: json(createdWorkflow("0", hash("customer-run"))),
+        },
+      ],
+      config: ALLOW,
+    });
+    expect(customRetry.stdout).toContain(`reused existing ${customName}`);
+    expect(writeCalls(customRetry)).toEqual([]);
+
+    const next = run(runArgs(["--new"]), {
+      responses: [
+        ...begin,
+        {
+          match: ["list"],
+          stdout: json([createdWorkflow("0"), createdWorkflow("not-a-number")]),
+        },
+        {
+          match: ["get"],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+        },
+        { match: ["submit"] },
+      ],
+      config: ALLOW,
+    });
+    const nextName = `nightly-etl-x7k2p-rs-${hash(`${uid}:1`)}`;
+    expect(next.stdout).toContain(`created ${nextName}`);
+    expect(
+      next.calls.find((call) => call.argv[0] === "submit")?.argv,
+    ).toContain(`--name=${nextName}`);
+  });
+});
+
 describe("idempotent no-ops (S15)", () => {
   it.each([
     [["wf", "suspend", "report-zz1"], "no-op (already_completed)"],
@@ -365,9 +595,8 @@ describe("idempotent no-ops (S15)", () => {
     const result = run(["wf", "resubmit", "report-zz1", "--memoized"], {
       responses: READS,
     });
-    expect(result.stdout).toContain(
-      "blocked - --memoized needs a Failed or Error workflow (this one is Succeeded)",
-    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("--memoized requires --new");
   });
 });
 

@@ -206,6 +206,7 @@ describe("read-only by construction (S5)", () => {
       "cron.resume",
       "cron.suspend",
       "wf.resubmit",
+      "wf.resubmit-native",
       "wf.resume",
       "wf.retry",
       "wf.stop",
