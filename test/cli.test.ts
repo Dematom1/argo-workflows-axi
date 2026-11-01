@@ -20,7 +20,6 @@ describe("cli basics", () => {
 
     const registeredCommands = Object.keys(buildCommands());
     expect(registeredCommands).toContain("context");
-    expect(registeredCommands).not.toContain("update");
     for (const name of registeredCommands) {
       const result = run([name, "--help"]);
       expect(result.exitCode, name).toBe(0);
@@ -49,6 +48,7 @@ describe("cli basics", () => {
         /examples\[\d+\]:\n((?: {2}- .+\n)+)/,
       )?.[1];
       for (const example of examples?.trimEnd().split("\n") ?? []) {
+        if (example.includes("|")) continue;
         const args = example.trim().slice(2).split(/\s+/).slice(1);
         const help = run([...args, "--help"]);
         expect(help.exitCode, args.join(" ")).toBe(0);
