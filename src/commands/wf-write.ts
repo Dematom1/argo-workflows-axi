@@ -519,7 +519,8 @@ async function applyResubmits(
         }
         if (priority !== undefined) {
           const workflowName = createdName;
-          if (!workflowName) throw new Error("Priority patch requires a created workflow name");
+          if (!workflowName)
+            throw new Error("Priority patch requires a created workflow name");
           try {
             await runWrite(
               "wf.priority-patch",
