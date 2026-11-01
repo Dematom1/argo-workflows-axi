@@ -532,6 +532,16 @@ async function applyResubmits(
         flagValue(parsed, "--key") ?? `${source.metadata.uid}:${generation}`;
       const keyHash = shortHash(idempotencyKey);
       const name = `${row.name.slice(0, 228)}-rs-${keyHash}`;
+      const assertMatchingIdentity = (workflow: Workflow) => {
+        if (
+          workflow.metadata.labels?.[RESUBMIT_KEY_LABEL] !== keyHash ||
+          workflow.metadata.labels?.[RESUBMIT_SOURCE_LABEL] !== sourceId
+        )
+          throw axiError(
+            `Deterministic name ${name} is taken by an unrelated workflow`,
+            "INVALID_REQUEST",
+          );
+      };
       const labels = Object.fromEntries(
         Object.entries(source.metadata.labels ?? {}).filter(
           ([key]) =>
@@ -560,6 +570,7 @@ async function applyResubmits(
         if (errorCode(error) !== "NOT_FOUND") throw error;
       }
       if (existing) {
+        assertMatchingIdentity(existing);
         results.push({
           name,
           result: `reused existing ${name}`,
@@ -612,6 +623,7 @@ async function applyResubmits(
         } catch (error) {
           if (errorCode(error) !== "ALREADY_EXISTS") throw error;
           const reused = await fetchWorkflow(name, forward);
+          assertMatchingIdentity(reused);
           results.push({
             name,
             result: `reused existing ${name}`,

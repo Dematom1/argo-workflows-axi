@@ -366,6 +366,24 @@ describe("idempotent resubmit", () => {
     expect(retry.stdout).toContain(`reused existing ${resultName}`);
     expect(writeCalls(retry)).toEqual([]);
 
+    const unrelated = (workflow: ReturnType<typeof createdWorkflow>) => ({
+      ...workflow,
+      metadata: {
+        ...workflow.metadata,
+        labels: { ...workflow.metadata.labels, "axi.argoproj.io/resubmit-source": "other-source" },
+      },
+    });
+    const nameTaken = run(runArgs([]), {
+      responses: [
+        ...begin,
+        prior,
+        { match: ["get", resultName], stdout: json(unrelated(createdWorkflow())) },
+      ],
+      config: ALLOW,
+    });
+    expect(nameTaken.exitCode).toBe(1);
+    expect(nameTaken.stdout).toContain("is taken by an unrelated workflow");
+
     const createRace = run(runArgs([]), {
       responses: [
         ...begin,
@@ -388,6 +406,29 @@ describe("idempotent resubmit", () => {
     });
     expect(createRace.exitCode).toBe(0);
     expect(createRace.stdout).toContain(`reused existing ${resultName}`);
+
+    const unrelatedRace = run(runArgs([]), {
+      responses: [
+        ...begin,
+        {
+          match: ["get", resultName],
+          stderr:
+            "Error: rpc error: code = NotFound desc = workflow not found\\n",
+          exit: 1,
+          times: 1,
+        },
+        {
+          match: ["submit"],
+          stderr:
+            "Error: rpc error: code = AlreadyExists desc = workflows already exists\\n",
+          exit: 1,
+        },
+        { match: ["get", resultName], stdout: json(unrelated(createdWorkflow())) },
+      ],
+      config: ALLOW,
+    });
+    expect(unrelatedRace.exitCode).toBe(1);
+    expect(unrelatedRace.stdout).toContain("is taken by an unrelated workflow");
   });
 
   it("requires --new for native memoized resubmit", () => {
