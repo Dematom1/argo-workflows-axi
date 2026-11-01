@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.9](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.8...argo-workflows-axi-v0.1.9) (2026-11-01)
+
+
+### Bug Fixes
+
+* **cli:** make workflow resubmits idempotent ([#31](https://github.com/Dematom1/argo-workflows-axi/issues/31)) ([f29b4dd](https://github.com/Dematom1/argo-workflows-axi/commit/f29b4ddb66ee3b6811888876ad9b82f507f05e71))
+
 ## [0.1.8](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.7...argo-workflows-axi-v0.1.8) (2026-10-31)
 
 
