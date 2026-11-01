@@ -19,6 +19,7 @@ describe("cli basics", () => {
     expect(() => decode(topLevel.stdout)).not.toThrow();
 
     const registeredCommands = Object.keys(buildCommands());
+    expect(registeredCommands).not.toContain("update"); // update is provided by axi-sdk-js
     expect(registeredCommands).toContain("context");
     for (const name of registeredCommands) {
       const result = run([name, "--help"]);
