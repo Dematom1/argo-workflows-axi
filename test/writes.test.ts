@@ -61,7 +61,7 @@ describe("write gate", () => {
       env: { ARGO_SERVER: "localhost:2746" },
     });
     expect(server.stdout).toContain(
-      "target: argo-server server=localhost:2746 namespace=argo",
+      'target: "argo-server server=localhost:2746 namespace=argo"',
     );
     expect(server.stdout).toContain("defaulted: true");
     expect(server.stdout).toContain(
@@ -82,20 +82,30 @@ describe("write gate", () => {
   });
 
   it("completes partial explicit targets from the matched allowlist entry", () => {
-    const server = run(["wf", "stop", "ingest-q9w8e", "--argo-server", "server-a"], {
-      responses: READS,
-      config: { writableTargets: [{ server: "server-a", namespace: "prod" }] },
-      env: { ARGO_SERVER: "server-a" },
-    });
+    const server = run(
+      ["wf", "stop", "ingest-q9w8e", "--argo-server", "server-a"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [{ server: "server-a", namespace: "prod" }],
+        },
+        env: { ARGO_SERVER: "server-a" },
+      },
+    );
     expect(server.stdout).toContain(
       "target: argo-server server=server-a namespace=prod",
     );
     expect(server.stdout).toContain("--argo-server server-a -n prod --apply");
 
-    const context = run(["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"], {
-      responses: READS,
-      config: { writableTargets: [{ context: "kind-dev", namespace: "prod" }] },
-    });
+    const context = run(
+      ["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [{ context: "kind-dev", namespace: "prod" }],
+        },
+      },
+    );
     expect(context.stdout).toContain(
       "target: kubernetes context=kind-dev namespace=prod",
     );
@@ -111,7 +121,9 @@ describe("write gate", () => {
     expect(result.stdout).toContain(
       "Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=prod-argo:2746 conflicts with context=kind-dev namespace=argo",
     );
-    expect(result.stdout).toContain("Unset ARGO_SERVER to use the Kubernetes target");
+    expect(result.stdout).toContain(
+      "Unset ARGO_SERVER to use the Kubernetes target",
+    );
     expect(argoCalls(result)).toEqual([]);
   });
 
