@@ -544,6 +544,20 @@ describe("idempotent resubmit", () => {
     expect(result.stdout).not.toContain("undefined");
   });
 
+  it("rejects priorities outside Argo's int32 range before writes", () => {
+    for (const priority of ["2147483648", "-2147483649", "1e2"]) {
+      for (const memoized of [[], ["--memoized", "--new"]]) {
+        const result = run(runArgs([...memoized, "--priority", priority]), {
+          responses: begin,
+          config: ALLOW,
+        });
+        expect(result.exitCode, priority).toBe(2);
+        expect(result.stdout, priority).toContain("VALIDATION_ERROR");
+        expect(writeCalls(result), priority).toEqual([]);
+      }
+    }
+  });
+
   it("uses --key and --new to choose deterministic generations", () => {
     const custom = run(runArgs(["--key", "customer-run"]), {
       responses: [
@@ -741,6 +755,27 @@ describe("wf submit", () => {
       exit: 1,
     },
   ];
+
+  it("rejects a --priority outside Argo's int32 range before writes", () => {
+    const result = run(
+      [
+        "wf",
+        "submit",
+        "--from",
+        "workflowtemplate/nightly-etl",
+        "--name",
+        "etl-1028",
+        "--priority",
+        "2147483648",
+        ...EXPLICIT,
+        "--apply",
+      ],
+      { responses: TEMPLATE_READS, config: ALLOW },
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("VALIDATION_ERROR");
+    expect(writeCalls(result)).toEqual([]);
+  });
 
   it("previews --from with merged parameters (redacted) and blocks on missing required ones", () => {
     const result = run(

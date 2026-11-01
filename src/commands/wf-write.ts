@@ -384,10 +384,7 @@ export const WRITES: Record<
           "VALIDATION_ERROR",
         );
       }
-      const priority = flagValue(parsed, "--priority");
-      if (priority !== undefined && !/^-?\d+$/.test(priority)) {
-        throw axiError("--priority must be a whole number", "VALIDATION_ERROR");
-      }
+      validatePriority(parsed);
       return [
         ...(hasFlag(parsed, "--memoized") ? ["--memoized"] : []),
         ...parameterArgs(parsed),
@@ -458,6 +455,19 @@ interface Row {
   name: string;
   phase: string;
   plan: Plan;
+}
+
+/** Argo's spec.priority is a signed int32; reject anything else before any write. */
+function validatePriority(parsed: ParsedArgs): string | undefined {
+  const priority = flagValue(parsed, "--priority");
+  if (priority === undefined) return undefined;
+  const value = Number(priority);
+  if (!/^-?\d+$/.test(priority) || value < -(2 ** 31) || value > 2 ** 31 - 1)
+    throw axiError(
+      "--priority must be a whole number between -2147483648 and 2147483647",
+      "VALIDATION_ERROR",
+    );
+  return priority;
 }
 
 const RESUBMIT_SOURCE_LABEL = "axi.argoproj.io/resubmit-source";
@@ -1175,10 +1185,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
       "VALIDATION_ERROR",
     );
   }
-  const priority = flagValue(parsed, "--priority");
-  if (priority !== undefined && !/^-?\d+$/.test(priority)) {
-    throw axiError("--priority must be a whole number", "VALIDATION_ERROR");
-  }
+  const priority = validatePriority(parsed);
   const target = await resolveTarget(parsed);
   const forward = forwardTarget(parsed);
   const echo: string[] = ["wf", "submit"];
