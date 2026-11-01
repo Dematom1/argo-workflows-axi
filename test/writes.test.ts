@@ -470,6 +470,17 @@ describe("idempotent resubmit", () => {
       "--namespace=argo",
       "--loglevel=error",
     ]);
+    expect(argoCalls(deliberate)[0]).not.toContain("--priority=5");
+    expect(argoCalls(deliberate)[0]).not.toContain("--priority");
+    expect(deliberate.calls.find((call) => call.bin === "kubectl" && call.argv[0] === "patch")?.argv).toEqual([
+      "patch",
+      "workflow",
+      resultName,
+      "--type=merge",
+      '--patch={"spec":{"priority":5}}',
+      "--context=kind-dev",
+      "--namespace=argo",
+    ]);
     expect(deliberate.stdout).toContain("memoized; not retry-safe");
   });
 
