@@ -38,14 +38,10 @@ export function resolveWriteTarget(target: Target): Target {
     return target;
   const targets = loadConfig().writableTargets.filter(
     (entry) =>
-      (target.explicit.context
-        ? entry.context === target.context
-        : target.explicit.server
-          ? entry.server === target.server
-          : true) &&
-      (target.explicit.namespace
-        ? entry.namespace === "*" || entry.namespace === target.namespace
-        : true),
+      (target.mode === "argo-server"
+        ? entry.server === target.server
+        : entry.context === target.context) &&
+      (entry.namespace === "*" || entry.namespace === target.namespace),
   );
   if (targets.length !== 1) {
     const list = targets.length

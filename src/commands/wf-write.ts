@@ -113,6 +113,12 @@ function writeForwardTarget(
     : { context: target.context, namespace: target.namespace };
 }
 
+function writeTargetSuffix(target: Target, parsed: ParsedArgs): string {
+  return target.defaulted
+    ? ` ${explicitTargetFlags(target)}`
+    : targetSuffix(parsed);
+}
+
 function parameterArgs(parsed: ParsedArgs): string[] {
   return flagValues(parsed, "--parameter").map((p) => {
     const eq = p.indexOf("=");
@@ -503,7 +509,7 @@ async function applyResubmits(
 ): Promise<Output> {
   const results: Array<Record<string, string>> = [];
   let failures = 0;
-  const suffix = ` ${explicitTargetFlags(target)}`;
+  const suffix = writeTargetSuffix(target, parsed);
   for (const row of rows) {
     if (row.plan.blocked) {
       failures += 1;
@@ -880,7 +886,7 @@ async function applyOutput<T>(
     }
   }
 
-  const suffix = ` ${explicitTargetFlags(target)}`;
+  const suffix = writeTargetSuffix(target, parsed);
   const out: Record<string, unknown> = {};
   if (failures > 0) {
     out.error = `${failures} of ${rows.length} ${spec.verb} operations failed`;
@@ -1315,7 +1321,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
       return redacted.value;
     }
 
-    const suffix = ` ${explicitTargetFlags(target)}`;
+    const suffix = writeTargetSuffix(target, parsed);
     if (existing) {
       return {
         action: "wf submit",

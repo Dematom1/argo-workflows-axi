@@ -112,6 +112,39 @@ describe("write gate", () => {
     expect(context.stdout).toContain("--context kind-dev -n prod --apply");
   });
 
+  it("matches partial targets against the active mode and inferred identity", () => {
+    const context = run(
+      ["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [
+            { context: "kind-dev", namespace: "argo" },
+            { context: "kind-dev", namespace: "prod" },
+          ],
+        },
+      },
+    );
+    expect(context.exitCode).toBe(0);
+    expect(context.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=argo",
+    );
+
+    const namespace = run(["wf", "stop", "ingest-q9w8e", "-n", "prod"], {
+      responses: READS,
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "prod" },
+          { server: "server-a", namespace: "prod" },
+        ],
+      },
+    });
+    expect(namespace.exitCode).toBe(0);
+    expect(namespace.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=prod",
+    );
+  });
+
   it("refuses a defaulted Kubernetes target while ARGO_SERVER is set", () => {
     const result = run(["wf", "stop", "ingest-q9w8e"], {
       config: ALLOW,
