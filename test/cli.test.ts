@@ -28,7 +28,7 @@ describe("cli basics", () => {
       expect(() => decode(result.stdout), name).not.toThrow();
       const subcommands = result.stdout.match(/subcommands\[\d+\]:\n((?:  .+\n)+)/)?.[1];
       const names = subcommands?.trimEnd().split("\n").map((line) =>
-        line.trim().split(":", 1)[0].split(/\s+/)[0],
+        line.trim().replace(/^-\s*/, "").split(":", 1)[0].split(/\s+/)[0],
       ) ?? [];
       for (const subcommand of names) {
         const help = run([name, subcommand, "--help"]);

@@ -67,18 +67,18 @@ const NOUNS: Record<string, Noun> = {
     help: `command: argo-workflows-axi wf <subcommand>
 description: Workflows. Reads are bounded; writes preview unless --apply.
 subcommands[12]:
-  list: Workflows, failing and running first
-  get <name|@latest>: Summary plus failed steps
-  logs <name|@latest> [<pod>]: Bounded logs of the failing step
-  wait <name>: Bounded wait (default 120s)
-  lint <file...|->: Validate manifests
-  submit <file|-> | --from <kind>/<name>: Submit (write)
-  retry <name...>: Re-run failed steps (write)
-  resubmit <name...>: New workflow from an old one (write)
-  stop <name...>: Stop, exit handlers run (write)
-  terminate <name...>: Stop now, no exit handlers (write)
-  suspend <name...>: Suspend (write)
-  resume <name...>: Resume (write)
+  - list: Workflows, failing and running first
+  - get <name|@latest>: Summary plus failed steps
+  - logs <name|@latest> optional pod: Bounded logs of the failing step
+  - wait <name>: Bounded wait (default 120s)
+  - lint <file...|->: Validate manifests
+  - submit <file|-> | --from <kind>/<name>: Submit (write)
+  - retry <name...>: Re-run failed steps (write)
+  - resubmit <name...>: New workflow from an old one (write)
+  - stop <name...>: Stop, exit handlers run (write)
+  - terminate <name...>: Stop now, no exit handlers (write)
+  - suspend <name...>: Suspend (write)
+  - resume <name...>: Resume (write)
 help[1]: Run \`argo-workflows-axi wf <subcommand> --help\` for flags and examples
 `,
     subcommands: {
@@ -100,10 +100,10 @@ help[1]: Run \`argo-workflows-axi wf <subcommand> --help\` for flags and example
     help: `command: argo-workflows-axi cron <subcommand>
 description: Cron workflows
 subcommands[4]:
-  list: Schedules, suspended first
-  get <name>: One cron workflow
-  suspend <name...>: Stop scheduling (write)
-  resume <name...>: Resume scheduling (write)
+  - list: Schedules, suspended first
+  - get <name>: One cron workflow
+  - suspend <name...>: Stop scheduling (write)
+  - resume <name...>: Resume scheduling (write)
 help[1]: Run \`argo-workflows-axi cron <subcommand> --help\` for flags and examples
 `,
     subcommands: {
@@ -117,9 +117,9 @@ help[1]: Run \`argo-workflows-axi cron <subcommand> --help\` for flags and examp
     help: `command: argo-workflows-axi template <subcommand>
 description: WorkflowTemplates (read-only)
 subcommands[3]:
-  list: Templates with entrypoint and parameter count
-  get <name>: Entrypoint and input parameters with defaults
-  lint <file...|->: Validate manifests
+  - list: Templates with entrypoint and parameter count
+  - get <name>: Entrypoint and input parameters with defaults
+  - lint <file...|->: Validate manifests
 `,
     subcommands: { list: templateList, get: templateGet, lint: templateLint },
   },
@@ -127,8 +127,8 @@ subcommands[3]:
     help: `command: argo-workflows-axi clustertemplate <subcommand>
 description: ClusterWorkflowTemplates (read-only, cluster-scoped)
 subcommands[2]:
-  list: Templates with entrypoint and parameter count
-  get <name>: Entrypoint and input parameters with defaults
+  - list: Templates with entrypoint and parameter count
+  - get <name>: Entrypoint and input parameters with defaults
 `,
     subcommands: { list: clusterTemplateList, get: clusterTemplateGet },
   },
@@ -136,8 +136,8 @@ subcommands[2]:
     help: `command: argo-workflows-axi archive <subcommand>
 description: Archived workflows (Argo Server mode only)
 subcommands[2]:
-  list: Archived workflows, failing first
-  get <name>: One archived workflow
+  - list: Archived workflows, failing first
+  - get <name>: One archived workflow
 `,
     subcommands: { list: archiveList, get: archiveGet },
   },
