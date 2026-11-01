@@ -43,6 +43,9 @@ export interface RunOptions {
   stdin?: string;
   /** Contents of ~/.config/argo-workflows-axi/config.json (object is JSON-encoded). */
   config?: unknown;
+  /** Initial Claude settings file contents and mode. */
+  claudeSettings?: string;
+  claudeSettingsMode?: number;
   /** Omit the fake kubectl (simulates kubectl missing). */
   noKubectl?: boolean;
   bin?: string;
@@ -108,6 +111,18 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
         ? options.config
         : JSON.stringify(options.config),
     );
+  }
+  if (options.claudeSettings !== undefined) {
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    writeFileSync(
+      join(home, ".claude", "settings.json"),
+      options.claudeSettings,
+    );
+    if (options.claudeSettingsMode !== undefined)
+      chmodSync(
+        join(home, ".claude", "settings.json"),
+        options.claudeSettingsMode,
+      );
   }
   const scenario = join(dir, "scenario.json");
   writeFileSync(

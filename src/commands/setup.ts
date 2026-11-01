@@ -1,11 +1,14 @@
 import {
-  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
+  statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import {
@@ -25,7 +28,7 @@ examples[1]:
 const MARKER = "argo-workflows-axi";
 const CTX_BIN = "argo-workflows-axi-ctx";
 type Settings = { hooks?: Record<string, unknown> } & Record<string, unknown>;
-type Group = { hooks?: Hook[]; matcher?: string; [key: string]: unknown };
+type Group = { hooks?: unknown; matcher?: string; [key: string]: unknown };
 type Hook = { command?: string; [key: string]: unknown };
 function readSettings(path: string): Settings {
   let contents: string;
@@ -47,6 +50,60 @@ function readSettings(path: string): Settings {
       "VALIDATION_ERROR",
     );
   }
+}
+function validateSessionEnd(settings: Settings): Group[] {
+  if (settings.hooks === undefined) return [];
+  if (
+    typeof settings.hooks !== "object" ||
+    settings.hooks === null ||
+    Array.isArray(settings.hooks)
+  )
+    throw axiError(
+      "Claude settings hooks must be an object",
+      "VALIDATION_ERROR",
+    );
+  const groups = settings.hooks.SessionEnd;
+  if (groups === undefined) return [];
+  if (
+    !Array.isArray(groups) ||
+    groups.some(
+      (group) =>
+        typeof group !== "object" || group === null || Array.isArray(group),
+    )
+  )
+    throw axiError(
+      "Claude settings hooks.SessionEnd must be an array of groups",
+      "VALIDATION_ERROR",
+    );
+  return groups as Group[];
+}
+function writeSettings(path: string, settings: Settings): void {
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true });
+  let mode: number | undefined;
+  try {
+    mode = statSync(path).mode & 0o777;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT"))
+      throw error;
+  }
+  const temp = join(dir, `.settings-${randomUUID()}.tmp`);
+  try {
+    writeFileSync(temp, JSON.stringify(settings, null, 2) + "\n", {
+      ...(mode === undefined ? {} : { mode }),
+      flag: "wx",
+    });
+    renameSync(temp, path);
+  } finally {
+    if (existsSync(temp)) unlinkSync(temp);
+  }
+}
+function hookStatus(wasInstalled: boolean, isInstalled: boolean): string {
+  return wasInstalled
+    ? "already installed"
+    : isInstalled
+      ? "installed"
+      : "stale";
 }
 function ctxEntrypoint(): string {
   const main = realpathSync(process.argv[1] ?? "");
@@ -74,33 +131,29 @@ export async function setupCommand(
   const settingsPath = join(homedir(), ".claude", "settings.json");
   const markerCommand = `argo-workflows-axi context end # ${MARKER}`;
   if (sub === "uninstall") {
-    readSettings(settingsPath);
+    const initial = readSettings(settingsPath);
+    validateSessionEnd(initial);
     uninstallSessionStartHooks({ marker: MARKER, scope: "user" });
     const settings = readSettings(settingsPath);
-    const hooks = settings.hooks;
-    const groups = hooks?.SessionEnd;
-    if (Array.isArray(groups)) {
-      const remaining = (groups as Group[])
-        .map((group) => ({
-          ...group,
-          hooks: group.hooks?.filter(
-            (hook) => !hook.command?.includes(markerCommand),
-          ),
-        }))
-        .filter((group) => group.hooks?.length);
-      if (hooks) {
-        if (remaining.length) hooks.SessionEnd = remaining;
-        else delete hooks.SessionEnd;
-      }
+    const groups = validateSessionEnd(settings);
+    if (settings.hooks) {
+      const remaining = groups.flatMap((group) => {
+        if (!Array.isArray(group.hooks)) return [group];
+        const kept = (group.hooks as Hook[]).filter(
+          (hook) => !hook.command?.includes(markerCommand),
+        );
+        return kept.length ? [{ ...group, hooks: kept }] : [];
+      });
+      if (remaining.length) settings.hooks.SessionEnd = remaining;
+      else delete settings.hooks.SessionEnd;
     }
-    writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", {
-      mode: 0o600,
-    });
-    chmodSync(settingsPath, 0o600);
+    writeSettings(settingsPath, settings);
     return { setup: "hooks uninstalled", scope: "user" };
   }
 
-  readSettings(settingsPath);
+  const settings = readSettings(settingsPath);
+  const groups = validateSessionEnd(settings);
+  const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const errors: string[] = [];
   installSessionStartHooks({
     marker: MARKER,
@@ -110,27 +163,21 @@ export async function setupCommand(
     scope: "user",
     onError: (message) => errors.push(message),
   });
-  const settings = readSettings(settingsPath);
-  settings.hooks ??= {};
-  const groups = settings.hooks.SessionEnd;
-  const retained = (Array.isArray(groups) ? (groups as Group[]) : [])
-    .map((group) => ({
-      ...group,
-      hooks: group.hooks?.filter(
-        (hook) => !hook.command?.includes(`# ${MARKER}`),
-      ),
-    }))
-    .filter((group) => group.hooks?.length);
+  const installedSettings = readSettings(settingsPath);
+  installedSettings.hooks ??= {};
+  const retained = groups.flatMap((group) => {
+    if (!Array.isArray(group.hooks)) return [group];
+    const kept = (group.hooks as Hook[]).filter(
+      (hook) => !hook.command?.includes(`# ${MARKER}`),
+    );
+    return kept.length ? [{ ...group, hooks: kept }] : [];
+  });
   retained.push({
     matcher: "",
     hooks: [{ type: "command", command: markerCommand, timeout: 10 }],
   });
-  settings.hooks.SessionEnd = retained;
-  mkdirSync(dirname(settingsPath), { recursive: true });
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", {
-    mode: 0o600,
-  });
-  chmodSync(settingsPath, 0o600);
+  installedSettings.hooks.SessionEnd = retained;
+  writeSettings(settingsPath, installedSettings);
   const status = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const out: Record<string, unknown> = {
     setup:
@@ -139,9 +186,9 @@ export async function setupCommand(
         : "hooks partially installed",
     scope: "user",
     runs: `${CTX_BIN} (offline - no network or credentials)`,
-    claude: status.claude.installed ? "installed" : "not installed",
-    codex: status.codex.installed ? "installed" : "not installed",
-    opencode: status.opencode.installed ? "installed" : "not installed",
+    claude: hookStatus(before.claude.installed, status.claude.installed),
+    codex: hookStatus(before.codex.installed, status.codex.installed),
+    opencode: hookStatus(before.opencode.installed, status.opencode.installed),
     session_end: "installed",
   };
   if (errors.length) out.errors = errors;

@@ -416,6 +416,33 @@ describe("setup hooks", () => {
     expect(first.calls).toEqual([]);
   });
 
+  it("rejects malformed hooks without changing settings", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const original = '{"hooks":"oops"}\n';
+    const result = run(["setup", "hooks"], { claudeSettings: original });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("code: VALIDATION_ERROR");
+    expect(
+      readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
+    ).toBe(original);
+  });
+
+  it("preserves unrelated SessionEnd groups and existing file mode", async () => {
+    const { readFileSync, statSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const result = run(["setup", "hooks"], {
+      claudeSettings: JSON.stringify({
+        hooks: { SessionEnd: [{ matcher: "keep-me" }] },
+      }),
+      claudeSettingsMode: 0o644,
+    });
+    const file = join(result.home, ".claude", "settings.json");
+    const settings = JSON.parse(readFileSync(file, "utf8"));
+    expect(settings.hooks.SessionEnd[0]).toEqual({ matcher: "keep-me" });
+    expect(statSync(file).mode & 0o777).toBe(0o644);
+  });
+
   it("installs user-scope hooks only: --project and --status are not flags", () => {
     for (const flag of ["--project", "--status"]) {
       const result = run(["setup", "hooks", flag]);
