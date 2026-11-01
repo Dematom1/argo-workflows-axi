@@ -175,7 +175,13 @@ function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
         ? renderPresentation(output)
         : render(output);
     }
-    if (REFUSALS[`${name} ${sub}`]) throw refused(`${name} ${sub}`);
+    if (REFUSALS[`${name} ${sub}`]) {
+      if (rest.includes("--help"))
+        return renderPresentation(
+          `command: argo-workflows-axi ${name} ${sub}\ndescription: Refused operation\n`,
+        );
+      throw refused(`${name} ${sub}`);
+    }
     throw axiError(`Unknown subcommand: ${name} ${sub}`, "VALIDATION_ERROR", [
       `Valid subcommands: ${Object.keys(noun.subcommands).join(", ")}`,
       `Run \`argo-workflows-axi ${name} --help\``,
@@ -184,7 +190,11 @@ function nounHandler(name: string, noun: Noun): AxiCliCommand<undefined> {
 }
 
 function refusedCommand(key: string): AxiCliCommand<undefined> {
-  return async () => {
+  return async (args) => {
+    if (args.includes("--help"))
+      return renderPresentation(
+        `command: argo-workflows-axi ${key}\ndescription: Refused operation\n`,
+      );
     throw refused(key);
   };
 }
