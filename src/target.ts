@@ -139,3 +139,11 @@ export function targetSuffix(parsed: ParsedArgs): string {
   if (args.namespace) parts.push(`-n ${shellQuote(args.namespace)}`);
   return parts.length > 0 ? ` ${parts.join(" ")}` : "";
 }
+
+export function resolvedTargetSuffix(target: Target): string {
+  const where =
+    target.mode === "argo-server"
+      ? `--argo-server ${shellQuote(target.server ?? "<host:port>")}`
+      : `--context ${shellQuote(target.context ?? "<context>")}`;
+  return ` ${where} -n ${shellQuote(target.namespace)}`;
+}

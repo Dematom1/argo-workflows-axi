@@ -78,6 +78,18 @@ describe("write gate", () => {
     expect(mixed.stdout).toContain("server=localhost:2746 namespace=argo");
   });
 
+  it("refuses a defaulted Kubernetes target while ARGO_SERVER is set", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e"], {
+      config: ALLOW,
+      env: { ARGO_SERVER: "prod-argo:2746" },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain(
+      "Cannot default to a Kubernetes target while ARGO_SERVER is set",
+    );
+    expect(argoCalls(result)).toEqual([]);
+  });
+
   it("does not let partial Kubernetes flags override ARGO_SERVER mode", () => {
     for (const flags of [
       ["--context", "kind-dev"],
@@ -306,7 +318,7 @@ describe("write gate", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain(
-      "--argo-server (ARGO_SERVER is set, so argo talks to that server)",
+      "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
     );
     expect(writeCalls(result)).toEqual([]);
   });
