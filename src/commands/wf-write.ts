@@ -36,6 +36,7 @@ import { shellQuote } from "../format.js";
 import {
   APPLY_FLAG,
   checkWrite,
+  explicitTargetFlags,
   resolveWriteTarget,
   type GateDecision,
 } from "../gate.js";
@@ -46,7 +47,6 @@ import {
   describeTarget,
   forwardTarget,
   resolveTarget,
-  resolvedTargetSuffix,
   targetSuffix,
   type Target,
 } from "../target.js";
@@ -874,7 +874,7 @@ async function applyOutput<T>(
     }
   }
 
-  const suffix = resolvedTargetSuffix(target);
+  const suffix = ` ${explicitTargetFlags(target)}`;
   const out: Record<string, unknown> = {};
   if (failures > 0) {
     out.error = `${failures} of ${rows.length} ${spec.verb} operations failed`;
@@ -1313,7 +1313,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
       return redacted.value;
     }
 
-    const suffix = resolvedTargetSuffix(target);
+    const suffix = ` ${explicitTargetFlags(target)}`;
     if (existing) {
       return {
         action: "wf submit",
