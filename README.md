@@ -82,7 +82,7 @@ You only need one of these.
 
 Writes (preview unless `--apply`): `wf submit`, `wf retry`, `wf resubmit`, `wf stop`, `wf terminate`, `wf suspend`, `wf resume`, `cron suspend`, `cron resume`.
 
-Flags use argo's own names: `-n/--namespace`, `-A/--all-namespaces` (reads only), `--context`, `-s/--argo-server`, `-l/--selector`, `-p/--parameter`, `--node-field-selector`, `--since`, `--tail`, `--grep`, and so on. Unknown flags are rejected before anything runs, with the valid flags listed. Every command has `--help` with flags and examples.
+Flags use argo's own names: `-n/--namespace`, `-A/--all-namespaces` (reads only), `--context`, `-s/--argo-server`, `-l/--selector`, `-p/--parameter`, `--node-field-selector`, `--since`, `--tail`, `--grep`, and so on. Unknown flags are rejected before anything runs, with the valid flags listed. Every command has `--help` in TOON; commands with flags or examples document them there.
 
 ## Safety model
 
