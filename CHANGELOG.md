@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.10](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.9...argo-workflows-axi-v0.1.10) (2026-11-01)
+
+
+### Bug Fixes
+
+* **cli:** emit valid TOON for all help output ([#37](https://github.com/Dematom1/argo-workflows-axi/issues/37)) ([182420d](https://github.com/Dematom1/argo-workflows-axi/commit/182420d5e510a68a6f6d4ce1aec9e9af1a07649a))
+* provide full-output guidance for truncated values ([#34](https://github.com/Dematom1/argo-workflows-axi/issues/34)) ([0184a3a](https://github.com/Dematom1/argo-workflows-axi/commit/0184a3ac2d61d11d0f6f6587eef6c491c9ebcea2))
+* **setup:** make hook installation safer and idempotent ([#33](https://github.com/Dematom1/argo-workflows-axi/issues/33)) ([bac3311](https://github.com/Dematom1/argo-workflows-axi/commit/bac331191c480cd87a35a02939d041ab2c7adb11))
+
 ## [0.1.9](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.8...argo-workflows-axi-v0.1.9) (2026-11-01)
 
 
