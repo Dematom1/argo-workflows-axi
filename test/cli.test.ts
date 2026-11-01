@@ -17,35 +17,25 @@ describe("cli basics", () => {
     expect(topLevel.exitCode).toBe(0);
     expect(() => decode(topLevel.stdout)).not.toThrow();
 
-    const commands = [
-      "triage",
-      "wf",
-      "cron",
-      "template",
-      "clustertemplate",
-      "archive",
-      "ctx",
-      "setup",
-    ];
-    const subcommands: Record<string, string[]> = {
-      wf: [
-        "list", "get", "logs", "wait", "lint", "submit", "retry", "resubmit",
-        "stop", "terminate", "suspend", "resume",
-      ],
-      cron: ["list", "get", "suspend", "resume"],
-      template: ["list", "get", "lint"],
-      clustertemplate: ["list", "get"],
-      archive: ["list", "get"],
-    };
+    const commands = topLevel.stdout.match(/commands\\[\\d+\\]:\\n((?:  .+\\n)+)/)?.[1];
+    expect(commands).toBeDefined();
+    for (const row of commands!.trimEnd().split("\\n")) {
+      const [name, ...listedSubs] = row.trim().split(":", 1)[0].split(/\\s+/);
+      if (name === "update" || name === "(none)") continue;
 
-    for (const command of commands) {
-      const result = run([command, "--help"]);
-      expect(result.exitCode, command).toBe(0);
-      expect(() => decode(result.stdout), command).not.toThrow();
-      for (const subcommand of subcommands[command] ?? []) {
-        const help = run([command, subcommand, "--help"]);
-        expect(help.exitCode, `${command} ${subcommand}`).toBe(0);
-        expect(() => decode(help.stdout), `${command} ${subcommand}`).not.toThrow();
+      const result = run([name, "--help"]);
+      expect(result.exitCode, name).toBe(0);
+      expect(() => decode(result.stdout), name).not.toThrow();
+      const subcommands = result.stdout.match(/subcommands\\[\\d+\\]:\\n((?:  .+\\n)+)/)?.[1];
+      if (!subcommands) continue;
+
+      const names = subcommands.trimEnd().split("\\n").map((line) =>
+        line.trim().split(":", 1)[0].split(/\\s+/)[0],
+      );
+      for (const subcommand of names) {
+        const help = run([name, subcommand, "--help"]);
+        expect(help.exitCode, `${name} ${subcommand}`).toBe(0);
+        expect(() => decode(help.stdout), `${name} ${subcommand}`).not.toThrow();
       }
     }
 
