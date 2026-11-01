@@ -139,10 +139,13 @@ export async function setupCommand(
     if (settings.hooks) {
       const remaining = groups.flatMap((group) => {
         if (!Array.isArray(group.hooks)) return [group];
-        const kept = (group.hooks as Hook[]).filter(
+        const hooks = group.hooks as Hook[];
+        const kept = hooks.filter(
           (hook) => !hook.command?.includes(markerCommand),
         );
-        return kept.length ? [{ ...group, hooks: kept }] : [];
+        return kept.length || hooks.length === 0
+          ? [{ ...group, hooks: kept }]
+          : [];
       });
       if (remaining.length) settings.hooks.SessionEnd = remaining;
       else delete settings.hooks.SessionEnd;
@@ -168,10 +171,13 @@ export async function setupCommand(
   installedSettings.hooks ??= {};
   const retained = installedGroups.flatMap((group) => {
     if (!Array.isArray(group.hooks)) return [group];
-    const kept = (group.hooks as Hook[]).filter(
+    const hooks = group.hooks as Hook[];
+    const kept = hooks.filter(
       (hook) => !hook.command?.includes(`# ${MARKER}`),
     );
-    return kept.length ? [{ ...group, hooks: kept }] : [];
+    return kept.length || hooks.length === 0
+      ? [{ ...group, hooks: kept }]
+      : [];
   });
   retained.push({
     matcher: "",
