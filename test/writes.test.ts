@@ -465,7 +465,6 @@ describe("idempotent resubmit", () => {
       "resubmit",
       "nightly-etl-x7k2p",
       "--memoized",
-      "--priority=5",
       "--output=json",
       "--context=kind-dev",
       "--namespace=argo",

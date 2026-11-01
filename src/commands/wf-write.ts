@@ -390,7 +390,6 @@ export const WRITES: Record<
       }
       return [
         ...(hasFlag(parsed, "--memoized") ? ["--memoized"] : []),
-        ...(priority !== undefined ? [`--priority=${priority}`] : []),
         ...parameterArgs(parsed),
       ];
     },
@@ -498,7 +497,6 @@ async function applyResubmits(
           [
             row.name,
             "--memoized",
-            ...(priority !== undefined ? [`--priority=${priority}`] : []),
             ...parameterArgs(parsed),
             "--output=json",
           ],
@@ -718,6 +716,17 @@ async function runNamedWrite<T>(
   const argoArgs = spec.argoArgs(parsed);
 
   const target = await resolveTarget(parsed);
+  if (
+    spec.op === "wf.resubmit" &&
+    hasFlag(parsed, "--memoized") &&
+    flagValue(parsed, "--priority") !== undefined &&
+    target.mode === "argo-server"
+  ) {
+    throw axiError(
+      "--memoized with --priority requires Kubernetes mode for the post-create kubectl patch; drop --priority or use --context",
+      "VALIDATION_ERROR",
+    );
+  }
   const command = [
     spec.noun,
     spec.verb,
