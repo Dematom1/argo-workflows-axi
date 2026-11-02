@@ -39,7 +39,7 @@ const workflow = (name) => ({
   kind: "Workflow",
   metadata: { name, namespace: "argo", uid: `uid-${name}` },
   spec: {
-    suspend: phase === "Suspended",
+    suspend: phase === "Suspended" || name === "already-suspended",
     entrypoint: "main",
     templates: [{ name: "main", container: { image: "fixture-only" } }],
   },
@@ -205,6 +205,23 @@ try {
     !batch.requests.some((r) => r.method !== "GET" && r.url.includes("/c/")),
   );
   assert.match(batch.stderr, /5s elapsed/);
+  stallName = "needs-suspension";
+  const expiredNoop = await run([
+    "wf", "suspend", "needs-suspension", "already-suspended", ...target,
+    "--timeout", "1s",
+  ]);
+  assert.equal(expiredNoop.exit, 1);
+  assert.deepEqual(
+    expiredNoop.output.results.map((r) => [r.name, r.status]),
+    [["needs-suspension", "unknown"], ["already-suspended", "no_op"]],
+  );
+  assert(
+    !expiredNoop.requests.some(
+      (r) => r.method !== "GET" && r.url.includes("/already-suspended/"),
+    ),
+    "planned no-op must not send a mutation after deadline expiry",
+  );
+  stallName = undefined;
   const stdin = await run(["wf", "submit", "-", ...target, "--timeout", "1s"], {
     openStdin: true,
   });
