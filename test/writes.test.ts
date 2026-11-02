@@ -1029,7 +1029,7 @@ describe("wf submit", () => {
     );
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain(
-      "Kubernetes context=unavailable namespace=argo conflicts with ARGO_SERVER=prod-argo:2746",
+      "Kubernetes context=kind-dev namespace=argo conflicts with ARGO_SERVER=prod-argo:2746",
     );
     expect(result.stdout).toContain("Unset ARGO_SERVER");
     expect(result.stdout).toContain("Pass --argo-server <host:port>");
