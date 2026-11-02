@@ -548,7 +548,7 @@ async function applyResubmits(
   let failures = 0;
   const suffix = writeTargetSuffix(target, parsed);
   for (const row of rows) {
-    if (writeDeadlineExpired() || row.plan.blocked) {
+    if (row.plan.blocked || writeDeadlineExpired()) {
       failures += 1;
       results.push({
         name: row.name,
@@ -934,6 +934,15 @@ async function applyOutput<T>(
   const results: Array<Record<string, string>> = [];
   let failures = 0;
   for (const row of rows) {
+    if (row.plan.noop) {
+      results.push({
+        name: row.name,
+        result: row.plan.noop,
+        phase_before: row.phase,
+        status: "no_op",
+      });
+      continue;
+    }
     if (writeDeadlineExpired()) {
       failures += 1;
       results.push({
@@ -941,15 +950,6 @@ async function applyOutput<T>(
         result: "overall deadline expired; no mutation attempted",
         phase_before: row.phase,
         status: "not_attempted",
-      });
-      continue;
-    }
-    if (row.plan.noop) {
-      results.push({
-        name: row.name,
-        result: row.plan.noop,
-        phase_before: row.phase,
-        status: "no_op",
       });
       continue;
     }

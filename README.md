@@ -148,7 +148,7 @@ Nothing streams or follows. `wf wait` is bounded and tells the agent to wait aga
 
 ## Errors and exit codes
 
-Errors go to stdout as `error`, `code` and `help` lines. Exit code 0 means the tool did what was asked, including no-ops and unhealthy workflows (a failed workflow is data, not an error). Exit code 1 means the request could not be met, and 2 means a usage error. Codes: `VALIDATION_ERROR`, `AUTH_REQUIRED`, `FORBIDDEN`, `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_REQUEST`, `RATE_LIMITED`, `SERVER_UNREACHABLE`, `CONTEXT_NOT_FOUND`, `TIMEOUT`, `REFUSED`, `UNSUPPORTED_IN_MODE`, `CONFIG_INVALID`, `ARGO_NOT_INSTALLED`, `WRITE_FAILED`, `UNKNOWN`.
+Errors go to stdout as `error`, `code` and `help` lines. Exit code 0 means the tool did what was asked, including no-ops and unhealthy workflows (a failed workflow is data, not an error). Exit code 1 means the request could not be met, and 2 means a usage error. Codes: `VALIDATION_ERROR`, `AUTH_REQUIRED`, `FORBIDDEN`, `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_REQUEST`, `RATE_LIMITED`, `SERVER_UNREACHABLE`, `CONTEXT_NOT_FOUND`, `TIMEOUT`, `REFUSED`, `UNSUPPORTED_IN_MODE`, `CONFIG_INVALID`, `ARGO_NOT_INSTALLED`, `WRITE_FAILED`, `WRITE_OUTCOME_UNKNOWN`, `UNKNOWN`.
 
 When authentication fails, the tool says to ask the user to log in. An agent cannot complete SSO.
 

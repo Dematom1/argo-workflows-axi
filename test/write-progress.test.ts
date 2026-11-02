@@ -48,6 +48,32 @@ describe("write acceptance and overall deadline", () => {
     expect(result.stdout).not.toContain("elapsed");
   });
 
+  it("keeps planned no-ops successful after the batch deadline expires", () => {
+    const alreadySuspended = {
+      ...wf("b"),
+      spec: { suspend: true },
+    };
+    const result = run(
+      ["wf", "suspend", "a", "b", ...target, "--timeout", "1s"],
+      {
+        config,
+        responses: [
+          { match: ["get", "a"], stdout: json(wf("a")) },
+          { match: ["get", "b"], stdout: json(alreadySuspended) },
+          { match: ["suspend", "a"], sleepMs: 5000 },
+        ],
+      },
+    );
+    expect(decode(result.stdout)).toMatchObject({
+      results: [
+        { name: "a", status: "unknown" },
+        { name: "b", status: "no_op", result: "already_suspended" },
+      ],
+    });
+    expect(result.exitCode).toBe(1);
+    expect(writeCalls(result)).toHaveLength(1);
+  });
+
   it("spends the same budget on preflight and never starts expired mutations", () => {
     const result = run(["wf", "stop", "a", "b", ...target, "--timeout", "1s"], {
       config,
