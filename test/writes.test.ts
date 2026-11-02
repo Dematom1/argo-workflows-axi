@@ -128,6 +128,45 @@ describe("write gate", () => {
     expect(context.stdout).toContain("--context kind-dev -n prod --apply");
   });
 
+  it("does not infer a server when the ambient Kubernetes context is unresolved", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e", "-n", "prod"], {
+      responses: [
+        { bin: "kubectl", match: ["current-context"], stdout: "" },
+        { bin: "kubectl", match: ["view", "--minify"], stdout: "" },
+        ...READS.slice(2),
+      ],
+      config: {
+        writableTargets: [
+          { server: "server-a", namespace: "prod" },
+          { context: "kind-dev", namespace: "prod" },
+        ],
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("2 matching");
+    expect(result.stdout).toContain("server=server-a namespace=prod");
+    expect(result.stdout).toContain("context=kind-dev namespace=prod");
+    expect(argoCalls(result)).toEqual([]);
+  });
+
+  it("requires an explicit namespace for a wildcard writable target", () => {
+    const implicit = run(["wf", "stop", "ingest-q9w8e", "--apply"], {
+      responses: READS,
+      config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
+    });
+    expect(implicit.exitCode).toBe(2);
+    expect(implicit.stdout).toContain("namespace cannot be defaulted");
+    expect(implicit.stdout).toContain("Pass -n <namespace> explicitly");
+    expect(argoCalls(implicit)).toEqual([]);
+
+    const explicit = run(["wf", "stop", "ingest-q9w8e", "-n", "prod", "--apply"], {
+      responses: [...READS, { match: ["stop", "ingest-q9w8e"], stdout: "" }],
+      config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
+    });
+    expect(explicit.exitCode).toBe(0);
+    expect(writeCalls(explicit)).toHaveLength(1);
+  });
+
   it("matches partial targets against the active mode and inferred identity", () => {
     const context = run(
       ["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"],

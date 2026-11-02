@@ -59,8 +59,9 @@ export function resolveWriteTarget(target: Target): Target {
         (target.explicit.context ||
           target.explicit.server ||
           (target.mode === "argo-server"
-            ? entry.server === target.server
-            : entry.context === target.context)) &&
+            ? entry.server !== undefined && entry.server === target.server
+            : entry.context !== undefined &&
+              entry.context === target.context)) &&
         (target.explicit.namespace ||
           entry.namespace === "*" ||
           entry.namespace === target.namespace),
@@ -83,6 +84,13 @@ export function resolveWriteTarget(target: Target): Target {
     );
   }
   const chosen = targets[0];
+  if (chosen.namespace === "*" && !target.explicit.namespace) {
+    throw axiError(
+      "The matching writable target allows any namespace; the namespace cannot be defaulted",
+      "VALIDATION_ERROR",
+      ["Pass -n <namespace> explicitly"],
+    );
+  }
   if (envServer() && !chosen.server) {
     throw axiError(
       `Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=${envServer()} conflicts with context=${chosen.context} namespace=${chosen.namespace}`,

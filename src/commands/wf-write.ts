@@ -76,7 +76,7 @@ const WRITE_FLAGS: FlagSpec = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG, {
 });
 
 const TARGET_HELP =
-  "  -n, --namespace <ns> and --context <name> (or -s, --argo-server <host:port>): required with --apply";
+  "  -n, --namespace <ns> and --context <name> (or -s, --argo-server <host:port>): optional when exactly one writable target matches; otherwise required";
 
 interface Plan {
   /** Present when nothing would change: an idempotent no-op (S15). */
@@ -167,7 +167,7 @@ function usageHelp(
   return `command: argo-workflows-axi ${cmd}
 description: ${description}. Previews by default; nothing changes without --apply.
 flags:
-${[...flags, "  --apply: Run the write (target must be explicit and in the local allowlist)", TARGET_HELP].join("\n")}
+${[...flags, "  --apply: Run the write (target must be in the local allowlist; defaults to the sole matching target)", TARGET_HELP].join("\n")}
 examples[${examples.length}]:
 
 ${examples.map((e) => `  - ${e}`).join("\n")}
