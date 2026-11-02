@@ -94,6 +94,14 @@ jobs:
       - run: pnpm run check:skill
       - run: pnpm test
 
+      - name: Record and verify package source revision
+        run: |
+          source_revision="$(git rev-parse HEAD)"
+          npm pkg set "gitHead=$source_revision"
+          tarball="$(npm pack --ignore-scripts --pack-destination "$RUNNER_TEMP" --silent)"
+          tar -xOzf "$RUNNER_TEMP/$tarball" package/package.json |
+            node -e 'let text = ""; process.stdin.on("data", chunk => text += chunk); process.stdin.on("end", () => { if (JSON.parse(text).gitHead !== process.argv[1]) process.exit(1); });' "$source_revision"
+
       - name: Stage npm package
         run: |
           npm stage publish --access public --provenance > "$RUNNER_TEMP/stage-publish.log"
