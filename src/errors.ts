@@ -19,6 +19,8 @@ export type ErrorCode =
   | "CONTEXT_NOT_FOUND"
   | "ARGO_NOT_INSTALLED"
   | "CONFIG_INVALID"
+  | "FILE_ERROR"
+  | "SETUP_FAILED"
   | "TIMEOUT"
   | "UNKNOWN";
 
