@@ -149,7 +149,7 @@ export async function setupCommand(
       `Run \`${usage}\``,
     ]);
   const settingsPath = join(homedir(), ".claude", "settings.json");
-  const markerCommand = `${realpathSync(process.argv[1] ?? "")} context end # ${MARKER}`;
+  const markerCommand = `${ctxEntrypoint()} context end # ${MARKER}`;
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
     validateSessionEnd(initial);
@@ -231,7 +231,7 @@ export async function setupCommand(
   if (errors.length || failedAgents.length) {
     throw axiError(
       `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map((error) => error.split(":")[0])])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
-      errors.length ? "FILE_ERROR" : "SETUP_FAILED",
+      "SETUP_FAILED",
     );
   }
   return {
