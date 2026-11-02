@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
-import { axiError, mapArgoFailure } from "./errors.js";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { performance } from "node:perf_hooks";
+import { axiError, errorCode, errorMessage, mapArgoFailure } from "./errors.js";
 import { isApprovalFor, type WriteApproval } from "./approval.js";
 import {
   OPERATIONS,
@@ -40,6 +42,38 @@ export interface ExecResult {
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 512 * 1024 * 1024;
+
+const writeScope = new AsyncLocalStorage<{ deadline: number; stage: string }>();
+
+/** One budget for target discovery, preflight and every item, not one per child. */
+export async function withWriteDeadline<T>(
+  action: string,
+  timeoutMs: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const started = performance.now();
+  const scope = { deadline: started + timeoutMs, stage: "preflight" };
+  const progress = () =>
+    process.stderr.write(
+      `${action}: ${scope.stage} (${Math.floor((performance.now() - started) / 1000)}s elapsed; ${timeoutMs / 1000}s overall deadline)\n`,
+    );
+  progress();
+  const timer = setInterval(progress, 5000);
+  try {
+    return await writeScope.run(scope, fn);
+  } finally {
+    clearInterval(timer);
+  }
+}
+
+export function writeRemainingMs(): number {
+  const scope = writeScope.getStore();
+  return scope ? Math.max(0, scope.deadline - performance.now()) : Infinity;
+}
+
+export function writeDeadlineExpired(): boolean {
+  return writeRemainingMs() <= 0;
+}
 
 function validateArgs(id: OperationId, op: Operation, args: string[]): void {
   for (const arg of args) {
@@ -82,7 +116,21 @@ function spawn(
   for (const name of options.unsetEnv ?? []) {
     delete env[name];
   }
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const scope = writeScope.getStore();
+  const remaining = scope ? scope.deadline - performance.now() : Infinity;
+  if (remaining <= 0) {
+    return Promise.reject(
+      axiError(
+        "Overall write deadline expired; request not attempted",
+        "TIMEOUT",
+      ),
+    );
+  }
+  if (scope) scope.stage = `${op.command.join(" ")} request`;
+  const timeoutMs = Math.max(
+    1,
+    Math.ceil(Math.min(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, remaining)),
+  );
 
   return new Promise((resolve, reject) => {
     const child = execFile(
@@ -121,8 +169,8 @@ function spawn(
         if (err.killed || err.signal === "SIGKILL") {
           reject(
             axiError(
-              `${op.bin} ${op.command.join(" ")} did not finish within ${Math.round(timeoutMs / 1000)}s`,
-              "TIMEOUT",
+              `${op.bin} ${op.command.join(" ")} did not finish within ${Math.ceil(timeoutMs / 1000)}s${op.tier === "write" ? "; acceptance is unknown; inspect the target before retrying" : ""}`,
+              op.tier === "write" ? "WRITE_OUTCOME_UNKNOWN" : "TIMEOUT",
               [
                 "Run `argo-workflows-axi ctx` to check the target",
                 "Ask the user whether the cluster or Argo Server is reachable",
@@ -136,7 +184,19 @@ function spawn(
           resolve({ stdout, stderr, exitCode });
           return;
         }
-        reject(mapArgoFailure(String(stderr || stdout || err.message)));
+        const failure = mapArgoFailure(String(stderr || stdout || err.message));
+        reject(
+          op.tier === "write" &&
+            ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(failure) ?? "")
+            ? axiError(
+                `${errorMessage(failure)}; acceptance is unknown; inspect the target before retrying`,
+                "WRITE_OUTCOME_UNKNOWN",
+                [
+                  "Use `argo-workflows-axi wf get <name>` or `cron get <name>` with the same target; do not blindly retry non-idempotent writes",
+                ],
+              )
+            : failure,
+        );
       },
     );
     child.stdin?.end();

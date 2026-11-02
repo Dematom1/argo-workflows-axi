@@ -40,7 +40,7 @@ function readSettings(path: string): Settings {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
-    throw axiError(`Could not read Claude settings at ${path}`, "UNKNOWN");
+    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR");
   }
   try {
     const parsed: unknown = JSON.parse(contents);
@@ -163,18 +163,33 @@ export async function setupCommand(
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
     validateSessionEnd(initial);
-    uninstallSessionStartHooks({ marker: MARKER, scope: "user" });
+    const errors: string[] = [];
+    const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
+    for (const { path } of [before.codex, before.opencode]) {
+      try {
+        readFileSync(path);
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "ENOENT"
+        ))
+          throw axiError(`Could not read hook file at ${path}`, "FILE_ERROR");
+      }
+    }
+    uninstallSessionStartHooks({
+      marker: MARKER,
+      scope: "user",
+      onError: (message) => errors.push(message),
+    });
     const settings = readSettings(settingsPath);
     const groups = validateSessionEnd(settings);
     if (settings.hooks) {
-      const legacyMarkerCommand = `${CTX_BIN} context end # ${MARKER}`;
       const remaining = groups.flatMap((group) => {
         if (!Array.isArray(group.hooks)) return [group];
         const hooks = group.hooks as Hook[];
         const kept = hooks.filter(
-          (hook) =>
-            !hook.command?.includes(markerCommand) &&
-            !hook.command?.includes(legacyMarkerCommand),
+          (hook) => !hook.command?.includes(`# ${MARKER}`),
         );
         return kept.length || hooks.length === 0
           ? [{ ...group, hooks: kept }]
@@ -183,8 +198,40 @@ export async function setupCommand(
       if (remaining.length) settings.hooks.SessionEnd = remaining;
       else delete settings.hooks.SessionEnd;
     }
-    writeSettings(settingsPath, settings);
-    return { setup: "hooks uninstalled", scope: "user" };
+    try {
+      writeSettings(settingsPath, settings);
+    } catch (error) {
+      errors.push(
+        `${settingsPath}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    const status = sessionStartHookStatus({ marker: MARKER, scope: "user" });
+    const sessionEndRemains = validateSessionEnd(
+      readSettings(settingsPath),
+    ).some(
+      (group) =>
+        Array.isArray(group.hooks) &&
+        group.hooks.some((hook) => hook.command?.includes(`# ${MARKER}`)),
+    );
+    const remaining = [
+      status.claude.installed,
+      status.codex.installed,
+      status.opencode.installed,
+      sessionEndRemains,
+    ].some(Boolean);
+    if (errors.length || remaining)
+      throw axiError(
+        `Hook uninstall failed${errors.length ? `; file errors: ${errors.join("; ")}` : "; managed hooks remain"}`,
+        "SETUP_FAILED",
+      );
+    return {
+      setup: "hook removal verified",
+      scope: "user",
+      claude: status.claude.installed ? "still installed" : "absent",
+      codex: status.codex.installed ? "still installed" : "absent",
+      opencode: status.opencode.installed ? "still installed" : "absent",
+      session_end: sessionEndRemains ? "still installed" : "absent",
+    };
   }
 
   const settings = readSettings(settingsPath);
