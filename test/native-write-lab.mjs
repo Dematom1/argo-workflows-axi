@@ -207,13 +207,21 @@ try {
   assert.match(batch.stderr, /5s elapsed/);
   stallName = "needs-suspension";
   const expiredNoop = await run([
-    "wf", "suspend", "needs-suspension", "already-suspended", ...target,
-    "--timeout", "1s",
+    "wf",
+    "suspend",
+    "needs-suspension",
+    "already-suspended",
+    ...target,
+    "--timeout",
+    "1s",
   ]);
   assert.equal(expiredNoop.exit, 1);
   assert.deepEqual(
     expiredNoop.output.results.map((r) => [r.name, r.status]),
-    [["needs-suspension", "unknown"], ["already-suspended", "no_op"]],
+    [
+      ["needs-suspension", "unknown"],
+      ["already-suspended", "no_op"],
+    ],
   );
   assert(
     !expiredNoop.requests.some(
