@@ -212,6 +212,9 @@ describe("write gate", () => {
     expect(result.stdout).toContain(
       "Unset ARGO_SERVER to use the Kubernetes target",
     );
+    expect(result.stdout).toContain(
+      "Pass --argo-server <host:port> to target Argo Server explicitly",
+    );
     expect(argoCalls(result)).toEqual([]);
   });
 
@@ -443,8 +446,9 @@ describe("write gate", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain(
-      "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
+      "Kubernetes context=kind-dev namespace=argo conflicts with ARGO_SERVER=argo.example.internal:2746",
     );
+    expect(result.stdout).toContain("Pass --argo-server <host:port>");
     expect(writeCalls(result)).toEqual([]);
   });
 
@@ -1007,6 +1011,23 @@ describe("wf submit", () => {
       exit: 1,
     },
   ];
+
+  it("refuses partial Kubernetes targets when ARGO_SERVER is set", () => {
+    const result = run(
+      ["wf", "submit", "--from", "workflowtemplate/nightly-etl", "-n", "argo"],
+      {
+        config: ALLOW,
+        env: { ARGO_SERVER: "prod-argo:2746" },
+      },
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain(
+      "Kubernetes context=unavailable namespace=argo conflicts with ARGO_SERVER=prod-argo:2746",
+    );
+    expect(result.stdout).toContain("Unset ARGO_SERVER");
+    expect(result.stdout).toContain("Pass --argo-server <host:port>");
+    expect(argoCalls(result)).toEqual([]);
+  });
 
   it("rejects a --priority outside Argo's int32 range before writes", () => {
     const result = run(

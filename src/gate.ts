@@ -26,9 +26,12 @@ export function resolveWriteTarget(target: Target): Target {
     (target.explicit.context || target.explicit.namespace)
   ) {
     throw axiError(
-      "A Kubernetes context or namespace cannot be combined with ARGO_SERVER",
+      `Kubernetes context=${target.context ?? "unavailable"} namespace=${target.namespace} conflicts with ARGO_SERVER=${envServer()}`,
       "VALIDATION_ERROR",
-      ["Pass --argo-server to target Argo Server explicitly"],
+      [
+        "Unset ARGO_SERVER to use the Kubernetes target",
+        "Pass --argo-server <host:port> to target Argo Server explicitly",
+      ],
     );
   }
   if (
@@ -95,7 +98,10 @@ export function resolveWriteTarget(target: Target): Target {
     throw axiError(
       `Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=${envServer()} conflicts with context=${chosen.context} namespace=${chosen.namespace}`,
       "VALIDATION_ERROR",
-      ["Unset ARGO_SERVER to use the Kubernetes target"],
+      [
+        "Unset ARGO_SERVER to use the Kubernetes target",
+        "Pass --argo-server <host:port> to target Argo Server explicitly",
+      ],
     );
   }
   return {
