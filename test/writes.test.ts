@@ -514,13 +514,10 @@ describe("idempotent resubmit", () => {
   ];
 
   it("uses the resolved target in resubmit follow-up guidance", () => {
-    const result = run(
-      ["wf", "resubmit", "nightly-etl-x7k2p", "--apply"],
-      {
-        responses: [...begin, prior, miss, { match: ["submit"], stdout: "{}" }],
-        config: ALLOW,
-      },
-    );
+    const result = run(["wf", "resubmit", "nightly-etl-x7k2p", "--apply"], {
+      responses: [...begin, prior, miss, { match: ["submit"], stdout: "{}" }],
+      config: ALLOW,
+    });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(
       `argo-workflows-axi wf get <name> --context kind-dev -n argo`,

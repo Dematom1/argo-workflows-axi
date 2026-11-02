@@ -38,10 +38,13 @@ export function resolveWriteTarget(target: Target): Target {
     return target;
   const configured = loadConfig().writableTargets;
   const hasExplicitTarget =
-    target.explicit.context || target.explicit.server || target.explicit.namespace;
+    target.explicit.context ||
+    target.explicit.server ||
+    target.explicit.namespace;
   const targets = configured.filter((entry) => {
     if (target.explicit.server && entry.server !== target.server) return false;
-    if (target.explicit.context && entry.context !== target.context) return false;
+    if (target.explicit.context && entry.context !== target.context)
+      return false;
     if (
       target.explicit.namespace &&
       entry.namespace !== "*" &&
@@ -53,12 +56,14 @@ export function resolveWriteTarget(target: Target): Target {
   if (hasExplicitTarget && targets.length > 1) {
     const inferred = targets.filter(
       (entry) =>
-        (target.explicit.context || target.explicit.server ||
+        (target.explicit.context ||
+          target.explicit.server ||
           (target.mode === "argo-server"
             ? entry.server === target.server
             : entry.context === target.context)) &&
         (target.explicit.namespace ||
-          (entry.namespace === "*" || entry.namespace === target.namespace)),
+          entry.namespace === "*" ||
+          entry.namespace === target.namespace),
     );
     if (inferred.length === 1) targets.splice(0, targets.length, inferred[0]);
   }
