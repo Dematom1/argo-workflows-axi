@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.14](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.13...argo-workflows-axi-v0.1.14) (2026-11-02)
+
+
+### Bug Fixes
+
+* **writes:** bound write operations and report acceptance ([#45](https://github.com/Dematom1/argo-workflows-axi/issues/45)) ([6697d2d](https://github.com/Dematom1/argo-workflows-axi/commit/6697d2ddf17ecd15468fff106e05a631218b0eeb))
+
 ## [0.1.13](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.12...argo-workflows-axi-v0.1.13) (2026-11-02)
 
 
