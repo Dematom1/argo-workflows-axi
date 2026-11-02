@@ -149,7 +149,7 @@ export async function setupCommand(
       `Run \`${usage}\``,
     ]);
   const settingsPath = join(homedir(), ".claude", "settings.json");
-  const markerCommand = `argo-workflows-axi context end # ${MARKER}`;
+  const markerCommand = `${realpathSync(process.argv[1] ?? "")} context end # ${MARKER}`;
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
     validateSessionEnd(initial);
@@ -200,20 +200,41 @@ export async function setupCommand(
     hooks: [{ type: "command", command: markerCommand, timeout: 10 }],
   });
   installedSettings.hooks.SessionEnd = retained;
-  writeSettings(settingsPath, installedSettings);
+  try {
+    writeSettings(settingsPath, installedSettings);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw axiError(
+      `Hook setup failed for claude; file errors: ${settingsPath}: ${detail}`,
+      "FILE_ERROR",
+    );
+  }
   const status = sessionStartHookStatus({ marker: MARKER, scope: "user" });
-  const out: Record<string, unknown> = {
-    setup:
-      errors.length === 0
-        ? "hooks installed or already up to date"
-        : "hooks partially installed",
-    scope: "user",
-    runs: `${CTX_BIN} (offline - no network or credentials)`,
+  const finalSettings = readSettings(settingsPath);
+  const sessionEndInstalled = validateSessionEnd(finalSettings).some(
+    (group) =>
+      Array.isArray(group.hooks) &&
+      group.hooks.some((hook) => hook.command === markerCommand),
+  );
+  const statuses = {
     claude: hookStatus(before.claude.installed, status.claude.installed),
     codex: hookStatus(before.codex.installed, status.codex.installed),
     opencode: hookStatus(before.opencode.installed, status.opencode.installed),
-    session_end: "installed",
+    session_end: sessionEndInstalled ? "installed" : "stale",
   };
-  if (errors.length) out.errors = errors;
-  return out;
+  const failedAgents = Object.entries(statuses)
+    .filter(([, value]) => value === "stale")
+    .map(([agent]) => agent);
+  if (errors.length || failedAgents.length) {
+    throw axiError(
+      `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map((error) => error.split(":")[0])])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
+      errors.length ? "FILE_ERROR" : "SETUP_FAILED",
+    );
+  }
+  return {
+    setup: "hooks installed or already up to date",
+    scope: "user",
+    runs: `${CTX_BIN} (offline - no network or credentials)`,
+    ...statuses,
+  };
 }

@@ -49,6 +49,8 @@ export interface RunOptions {
   claudeSettings?: string;
   claudeSettingsMode?: number;
   claudeSettingsSymlink?: boolean;
+  readonlyCodex?: boolean;
+  readonlyConfig?: boolean;
   umask?: number;
   /** Omit the fake kubectl (simulates kubectl missing). */
   noKubectl?: boolean;
@@ -131,6 +133,15 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
       );
     if (options.claudeSettingsSymlink) symlinkSync(targetPath, settingsPath);
   }
+  if (options.readonlyCodex) {
+    mkdirSync(join(home, ".codex"), { recursive: true });
+    chmodSync(join(home, ".codex"), 0o555);
+  }
+  if (options.readonlyConfig) {
+    mkdirSync(configHome, { recursive: true });
+    chmodSync(configHome, 0o555);
+  }
+
   const scenario = join(dir, "scenario.json");
   writeFileSync(
     scenario,
