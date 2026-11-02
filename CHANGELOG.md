@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.13](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.12...argo-workflows-axi-v0.1.13) (2026-11-02)
+
+
+### Features
+
+* stamp gitHead into published package ([#43](https://github.com/Dematom1/argo-workflows-axi/issues/43)) ([a46d34c](https://github.com/Dematom1/argo-workflows-axi/commit/a46d34c5df6edd544065375f914d8e331ddcc558))
+
+
+### Bug Fixes
+
+* **setup:** report hook installation failures truthfully ([#42](https://github.com/Dematom1/argo-workflows-axi/issues/42)) ([37159b0](https://github.com/Dematom1/argo-workflows-axi/commit/37159b0b6dc1343a3af5e7dbfea963d089a0d746))
+
 ## [0.1.12](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.11...argo-workflows-axi-v0.1.12) (2026-11-02)
 
 
