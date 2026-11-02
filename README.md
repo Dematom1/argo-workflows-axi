@@ -102,7 +102,7 @@ argo-workflows-axi is read-first. It can make only the writes listed above, and 
    run: argo-workflows-axi wf stop ingest-q9w8e report-zz1 --context kind-dev -n argo --apply
    ```
 
-2. **Explicit target.** `--apply` needs `-n <namespace>` plus `--context <name>` (or `--argo-server <host:port>` in Argo Server mode). It never accepts `-A`. If `ARGO_SERVER` is set, a write aimed only at a kube context is rejected rather than silently sent to that server.
+2. **Resolved target.** An omitted target defaults only when exactly one configured writable target matches; the preview names it and prints the exact apply command. Zero or multiple matches refuse and list the matching targets. Explicit target flags override defaulting. Writes never accept `-A`. If `ARGO_SERVER` is set and the sole writable target is Kubernetes, the command names both targets and refuses; unset `ARGO_SERVER` to use the Kubernetes target.
 3. **Local allowlist, default none.** Writes run only against targets listed in `~/.config/argo-workflows-axi/config.json` (or `$XDG_CONFIG_HOME/argo-workflows-axi/config.json`). No command writes this file, so an agent cannot opt itself in:
 
    ```json

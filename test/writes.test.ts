@@ -24,6 +24,227 @@ const READS: FakeResponse[] = [
 ];
 
 describe("write gate", () => {
+  it("defaults to the sole writable target and names it in preview and apply", () => {
+    const preview = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: READS,
+      config: ALLOW,
+    });
+    expect(preview.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=argo",
+    );
+    expect(preview.stdout).toContain("defaulted: true");
+    expect(preview.stdout).toContain("--context kind-dev -n argo --apply");
+
+    const ambiguous = run(["wf", "stop", "ingest-q9w8e"], {
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { context: "prod", namespace: "argo" },
+        ],
+      },
+    });
+    expect(ambiguous.stdout).toContain("2 matching");
+    expect(ambiguous.stdout).toContain("kind-dev namespace=argo");
+    expect(ambiguous.stdout).toContain("prod namespace=argo");
+
+    const none = run(["wf", "stop", "ingest-q9w8e"]);
+    expect(none.stdout).toContain("0 matching");
+    expect(none.stdout).toContain("--context <context>");
+  });
+
+  it("defaults to the sole allowlisted target despite ambient kubeconfig", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: [
+        { bin: "kubectl", match: ["current-context"], stdout: "kind-dev\\n" },
+        { bin: "kubectl", match: ["view", "--minify"], stdout: "default" },
+        ...READS.slice(2),
+      ],
+      config: { writableTargets: [{ context: "prod", namespace: "argo" }] },
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      "target: kubernetes context=prod namespace=argo",
+    );
+    expect(result.stdout).toContain("--context prod -n argo --apply");
+  });
+
+  it("defaults server-only targets and refuses mixed target ambiguity", () => {
+    const server = run(["wf", "stop", "ingest-q9w8e"], {
+      responses: READS,
+      config: {
+        writableTargets: [{ server: "localhost:2746", namespace: "argo" }],
+      },
+      env: { ARGO_SERVER: "localhost:2746" },
+    });
+    expect(server.stdout).toContain(
+      'target: "argo-server server=localhost:2746 namespace=argo"',
+    );
+    expect(server.stdout).toContain("defaulted: true");
+    expect(server.stdout).toContain(
+      "--argo-server localhost:2746 -n argo --apply",
+    );
+
+    const mixed = run(["wf", "stop", "ingest-q9w8e"], {
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { server: "localhost:2746", namespace: "argo" },
+        ],
+      },
+    });
+    expect(mixed.stdout).toContain("2 matching");
+    expect(mixed.stdout).toContain("context=kind-dev namespace=argo");
+    expect(mixed.stdout).toContain("server=localhost:2746 namespace=argo");
+  });
+
+  it("completes partial explicit targets from the matched allowlist entry", () => {
+    const server = run(
+      ["wf", "stop", "ingest-q9w8e", "--argo-server", "server-a"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [{ server: "server-a", namespace: "prod" }],
+        },
+        env: { ARGO_SERVER: "server-a" },
+      },
+    );
+    expect(server.stdout).toContain(
+      "target: argo-server server=server-a namespace=prod",
+    );
+    expect(server.stdout).toContain("--argo-server server-a -n prod --apply");
+
+    const context = run(
+      ["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [{ context: "kind-dev", namespace: "prod" }],
+        },
+      },
+    );
+    expect(context.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=prod",
+    );
+    expect(context.stdout).toContain("--context kind-dev -n prod --apply");
+  });
+
+  it("does not infer a server when the ambient Kubernetes context is unresolved", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e", "-n", "prod"], {
+      responses: [
+        { bin: "kubectl", match: ["current-context"], stdout: "" },
+        { bin: "kubectl", match: ["view", "--minify"], stdout: "" },
+        ...READS.slice(2),
+      ],
+      config: {
+        writableTargets: [
+          { server: "server-a", namespace: "prod" },
+          { context: "kind-dev", namespace: "prod" },
+        ],
+      },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain("2 matching");
+    expect(result.stdout).toContain("server=server-a namespace=prod");
+    expect(result.stdout).toContain("context=kind-dev namespace=prod");
+    expect(argoCalls(result)).toEqual([]);
+  });
+
+  it("requires an explicit namespace for a wildcard writable target", () => {
+    const implicit = run(["wf", "stop", "ingest-q9w8e", "--apply"], {
+      responses: READS,
+      config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
+    });
+    expect(implicit.exitCode).toBe(2);
+    expect(implicit.stdout).toContain("namespace cannot be defaulted");
+    expect(implicit.stdout).toContain("Pass -n <namespace> explicitly");
+    expect(argoCalls(implicit)).toEqual([]);
+
+    const explicit = run(
+      ["wf", "stop", "ingest-q9w8e", "-n", "prod", "--apply"],
+      {
+        responses: [...READS, { match: ["stop", "ingest-q9w8e"], stdout: "" }],
+        config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
+      },
+    );
+    expect(explicit.exitCode).toBe(0);
+    expect(writeCalls(explicit)).toHaveLength(1);
+  });
+
+  it("matches partial targets against the active mode and inferred identity", () => {
+    const context = run(
+      ["wf", "stop", "ingest-q9w8e", "--context", "kind-dev"],
+      {
+        responses: READS,
+        config: {
+          writableTargets: [
+            { context: "kind-dev", namespace: "argo" },
+            { context: "kind-dev", namespace: "prod" },
+          ],
+        },
+      },
+    );
+    expect(context.exitCode).toBe(0);
+    expect(context.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=argo",
+    );
+
+    const namespace = run(["wf", "stop", "ingest-q9w8e", "-n", "prod"], {
+      responses: READS,
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "prod" },
+          { server: "server-a", namespace: "prod" },
+        ],
+      },
+    });
+    expect(namespace.exitCode).toBe(0);
+    expect(namespace.stdout).toContain(
+      "target: kubernetes context=kind-dev namespace=prod",
+    );
+  });
+
+  it("refuses a defaulted Kubernetes target while ARGO_SERVER is set", () => {
+    const result = run(["wf", "stop", "ingest-q9w8e"], {
+      config: ALLOW,
+      env: { ARGO_SERVER: "prod-argo:2746" },
+    });
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain(
+      "Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=prod-argo:2746 conflicts with context=kind-dev namespace=argo",
+    );
+    expect(result.stdout).toContain(
+      "Unset ARGO_SERVER to use the Kubernetes target",
+    );
+    expect(result.stdout).toContain(
+      "Pass --argo-server <host:port> to target Argo Server explicitly",
+    );
+    expect(argoCalls(result)).toEqual([]);
+  });
+
+  it("does not let partial Kubernetes flags override ARGO_SERVER mode", () => {
+    for (const flags of [
+      ["--context", "kind-dev"],
+      ["-n", "argo"],
+    ]) {
+      const result = run(["wf", "stop", "ingest-q9w8e", ...flags], {
+        responses: READS,
+        config: ALLOW,
+        env: { ARGO_SERVER: "prod-argo:2746" },
+      });
+      expect(result.exitCode).toBe(2);
+      expect(result.stdout).toContain(
+        "Kubernetes context=kind-dev namespace=argo conflicts with ARGO_SERVER=prod-argo:2746",
+      );
+      expect(result.stdout).toContain(
+        "Unset ARGO_SERVER to use the Kubernetes target",
+      );
+      expect(result.stdout).toContain(
+        "Pass --argo-server <host:port> to target Argo Server explicitly",
+      );
+      expect(argoCalls(result)).toEqual([]);
+    }
+  });
+
   it("previews by default: no write reaches argo and the exact run command is printed", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "report-zz1"], {
       responses: READS,
@@ -44,7 +265,9 @@ describe("write gate", () => {
   });
 
   it("says so in the preview when the target is not in the allowlist (default: none)", () => {
-    const result = run(["wf", "suspend", "ingest-q9w8e"], { responses: READS });
+    const result = run(["wf", "suspend", "ingest-q9w8e", ...EXPLICIT], {
+      responses: READS,
+    });
     expect(result.stdout).toContain(
       "writable: no - this target is not in ~/.config/argo-workflows-axi/config.json",
     );
@@ -54,16 +277,20 @@ describe("write gate", () => {
     expect(writeCalls(result)).toEqual([]);
   });
 
-  it("--apply without an explicit target is a usage error and nothing is sent", () => {
+  it("--apply refuses an ambiguous target and sends nothing", () => {
     const result = run(["wf", "stop", "ingest-q9w8e", "--apply"], {
       responses: READS,
-      config: ALLOW,
+      config: {
+        writableTargets: [
+          { context: "kind-dev", namespace: "argo" },
+          { context: "prod", namespace: "argo" },
+        ],
+      },
     });
     expect(result.exitCode).toBe(2);
-    expect(result.stdout).toContain(
-      "--apply needs an explicit target: missing -n/--namespace, --context",
-    );
-    expect(result.stdout).toContain("--context kind-dev -n argo --apply");
+    expect(result.stdout).toContain("2 matching");
+    expect(result.stdout).toContain("kind-dev namespace=argo");
+    expect(result.stdout).toContain("prod namespace=argo");
     expect(argoCalls(result)).toEqual([]);
   });
 
@@ -204,6 +431,7 @@ describe("write gate", () => {
   it("rejects -A on writes, even for a preview", () => {
     const result = run(["wf", "retry", "nightly-etl-x7k2p", "-A"], {
       responses: READS,
+      config: ALLOW,
     });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("Writes never accept -A/--all-namespaces");
@@ -228,8 +456,9 @@ describe("write gate", () => {
     });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain(
-      "--argo-server (ARGO_SERVER is set, so argo talks to that server)",
+      "Kubernetes context=kind-dev namespace=argo conflicts with ARGO_SERVER=argo.example.internal:2746",
     );
+    expect(result.stdout).toContain("Pass --argo-server <host:port>");
     expect(writeCalls(result)).toEqual([]);
   });
 
@@ -336,6 +565,17 @@ describe("idempotent resubmit", () => {
     ...args,
     "--apply",
   ];
+
+  it("uses the resolved target in resubmit follow-up guidance", () => {
+    const result = run(["wf", "resubmit", "nightly-etl-x7k2p", "--apply"], {
+      responses: [...begin, prior, miss, { match: ["submit"], stdout: "{}" }],
+      config: ALLOW,
+    });
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain(
+      `argo-workflows-axi wf get <name> --context kind-dev -n argo`,
+    );
+  });
 
   it("creates with a stable name and idempotency label; retry reuses it", () => {
     const first = run(runArgs([]), {
@@ -667,6 +907,7 @@ describe("idempotent no-ops (S15)", () => {
         ...KUBE_DEFAULTS,
         { match: ["get"], stdout: json(d.runningIngest({ suspend: true })) },
       ],
+      config: ALLOW,
     });
     expect(suspended.stdout).toContain("no-op (already_suspended)");
     const stopping = run(["wf", "stop", "ingest-q9w8e"], {
@@ -674,6 +915,7 @@ describe("idempotent no-ops (S15)", () => {
         ...KUBE_DEFAULTS,
         { match: ["get"], stdout: json(d.runningIngest({ shutdown: "Stop" })) },
       ],
+      config: ALLOW,
     });
     expect(stopping.stdout).toContain("no-op (already_shutting_down (Stop))");
   });
@@ -735,6 +977,7 @@ describe("cron suspend/resume", () => {
   it("previews and reports idempotent no-ops", () => {
     const result = run(["cron", "suspend", "nightly-etl", "weekly-cleanup"], {
       responses: CRON_READS,
+      config: ALLOW,
     });
     expect(result.stdout).toContain("cron_workflows[2]{name,phase,change}:");
     expect(result.stdout).toContain("nightly-etl,active,suspend schedule");
@@ -779,6 +1022,23 @@ describe("wf submit", () => {
     },
   ];
 
+  it("refuses partial Kubernetes targets when ARGO_SERVER is set", () => {
+    const result = run(
+      ["wf", "submit", "--from", "workflowtemplate/nightly-etl", "-n", "argo"],
+      {
+        config: ALLOW,
+        env: { ARGO_SERVER: "prod-argo:2746" },
+      },
+    );
+    expect(result.exitCode).toBe(2);
+    expect(result.stdout).toContain(
+      "Kubernetes context=kind-dev namespace=argo conflicts with ARGO_SERVER=prod-argo:2746",
+    );
+    expect(result.stdout).toContain("Unset ARGO_SERVER");
+    expect(result.stdout).toContain("Pass --argo-server <host:port>");
+    expect(argoCalls(result)).toEqual([]);
+  });
+
   it("rejects a --priority outside Argo's int32 range before writes", () => {
     const result = run(
       [
@@ -814,6 +1074,7 @@ describe("wf submit", () => {
       ],
       {
         responses: TEMPLATE_READS,
+        config: ALLOW,
       },
     );
     expect(result.exitCode).toBe(0);
@@ -913,6 +1174,7 @@ describe("wf submit", () => {
         ...KUBE_DEFAULTS,
         { match: ["lint"], stdout: "no linting errors found!\n" },
       ],
+      config: { writableTargets: [{ context: "prod", namespace: "argo" }] },
     });
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("source: manifest");
@@ -920,7 +1182,7 @@ describe("wf submit", () => {
     expect(result.stdout).toContain("entrypoint: say");
     expect(result.stdout).toContain("not idempotent");
     expect(result.stdout).toContain(
-      `run: argo-workflows-axi wf submit ${file} --context kind-dev -n argo --apply`,
+      `run: argo-workflows-axi wf submit ${file} --context prod -n argo --apply`,
     );
     expect(writeCalls(result)).toEqual([]);
   });
@@ -929,7 +1191,10 @@ describe("wf submit", () => {
     const dir = mkdtempSync(join(tmpdir(), "awf-axi-spec-"));
     const file = join(dir, "tmpl.yaml");
     writeFileSync(file, "kind: WorkflowTemplate\nmetadata:\n  name: x\n");
-    const wrongKind = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
+    const wrongKind = run(["wf", "submit", file], {
+      responses: KUBE_DEFAULTS,
+      config: ALLOW,
+    });
     expect(wrongKind.exitCode).toBe(2);
     expect(wrongKind.stdout).toContain("Expected kind Workflow");
     const both = run(["wf", "submit", file, "--from", "workflowtemplate/x"]);
@@ -946,7 +1211,7 @@ describe("wf submit", () => {
   it("accepts argo's own spellings of the --from kinds", () => {
     const result = run(
       ["wf", "submit", "--from", "wftmpl/nightly-etl", "-p", "date=x"],
-      { responses: TEMPLATE_READS },
+      { responses: TEMPLATE_READS, config: ALLOW },
     );
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("source: workflowtemplate/nightly-etl");
@@ -1032,7 +1297,10 @@ describe("wf submit", () => {
       "dup.yaml",
       "kind: Workflow\nmetadata:\n  name: hello\n  namespace: argo\n  namespace: prod\n",
     );
-    const result = run(["wf", "submit", file], { responses: KUBE_DEFAULTS });
+    const result = run(["wf", "submit", file], {
+      responses: KUBE_DEFAULTS,
+      config: ALLOW,
+    });
     expect(result.exitCode).toBe(2);
     expect(result.stdout).toContain("not valid YAML");
     expect(argoCalls(result)).toEqual([]);

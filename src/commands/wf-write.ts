@@ -33,7 +33,13 @@ import {
 } from "../cron-data.js";
 import { axiError, errorCode, errorMessage } from "../errors.js";
 import { shellQuote } from "../format.js";
-import { APPLY_FLAG, checkWrite, type GateDecision } from "../gate.js";
+import {
+  APPLY_FLAG,
+  checkWrite,
+  explicitTargetFlags,
+  resolveWriteTarget,
+  type GateDecision,
+} from "../gate.js";
 import { redactText, redactValue } from "../redact.js";
 import type { WriteOperationId } from "../registry.js";
 import { parseJsonStream, runWrite } from "../seam.js";
@@ -70,7 +76,7 @@ const WRITE_FLAGS: FlagSpec = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG, {
 });
 
 const TARGET_HELP =
-  "  -n, --namespace <ns> and --context <name> (or -s, --argo-server <host:port>): required with --apply";
+  "  -n, --namespace <ns> and --context <name> (or -s, --argo-server <host:port>): optional when exactly one writable target matches; otherwise required";
 
 interface Plan {
   /** Present when nothing would change: an idempotent no-op (S15). */
@@ -95,6 +101,22 @@ interface NamedWrite<T> {
   argoArgs: (parsed: ParsedArgs) => string[];
   /** Same flags as typed by the user, for the `run:` command. */
   echoArgs: (parsed: ParsedArgs) => string[];
+}
+
+function writeForwardTarget(
+  target: Target,
+  parsed: ParsedArgs,
+): ReturnType<typeof forwardTarget> {
+  if (!target.defaulted) return forwardTarget(parsed);
+  return target.mode === "argo-server"
+    ? { server: target.server, namespace: target.namespace }
+    : { context: target.context, namespace: target.namespace };
+}
+
+function writeTargetSuffix(target: Target, parsed: ParsedArgs): string {
+  return target.defaulted
+    ? ` ${explicitTargetFlags(target)}`
+    : targetSuffix(parsed);
 }
 
 function parameterArgs(parsed: ParsedArgs): string[] {
@@ -145,7 +167,7 @@ function usageHelp(
   return `command: argo-workflows-axi ${cmd}
 description: ${description}. Previews by default; nothing changes without --apply.
 flags:
-${[...flags, "  --apply: Run the write (target must be explicit and in the local allowlist)", TARGET_HELP].join("\n")}
+${[...flags, "  --apply: Run the write (target must be in the local allowlist; defaults to the sole matching target)", TARGET_HELP].join("\n")}
 examples[${examples.length}]:
 
 ${examples.map((e) => `  - ${e}`).join("\n")}
@@ -487,7 +509,7 @@ async function applyResubmits(
 ): Promise<Output> {
   const results: Array<Record<string, string>> = [];
   let failures = 0;
-  const suffix = targetSuffix(parsed);
+  const suffix = writeTargetSuffix(target, parsed);
   for (const row of rows) {
     if (row.plan.blocked) {
       failures += 1;
@@ -730,7 +752,7 @@ async function runNamedWrite<T>(
   // Validates flag values (e.g. --parameter, --priority) before any call.
   const argoArgs = spec.argoArgs(parsed);
 
-  const target = await resolveTarget(parsed);
+  const target = resolveWriteTarget(await resolveTarget(parsed));
   if (
     spec.op === "wf.resubmit" &&
     hasFlag(parsed, "--memoized") &&
@@ -753,7 +775,7 @@ async function runNamedWrite<T>(
       ? "wf.resubmit-native"
       : spec.op;
   const gate = checkWrite(writeOp, parsed, target, command);
-  const forward = forwardTarget(parsed);
+  const forward = writeForwardTarget(target, parsed);
 
   const rows: Row[] = [];
   for (const name of names) {
@@ -788,6 +810,7 @@ function previewOutput<T>(
     dry_run: true,
     action: `${spec.noun} ${spec.verb}`,
     target: targetLine(target),
+    defaulted: target.defaulted === true,
     writable: gate.writable,
     [spec.noun === "wf" ? "workflows" : "cron_workflows"]: rows.map((r) => ({
       name: r.name,
@@ -863,7 +886,7 @@ async function applyOutput<T>(
     }
   }
 
-  const suffix = targetSuffix(parsed);
+  const suffix = writeTargetSuffix(target, parsed);
   const out: Record<string, unknown> = {};
   if (failures > 0) {
     out.error = `${failures} of ${rows.length} ${spec.verb} operations failed`;
@@ -1196,8 +1219,8 @@ export async function wfSubmit(args: string[]): Promise<Output> {
     );
   }
   const priority = validatePriority(parsed);
-  const target = await resolveTarget(parsed);
-  const forward = forwardTarget(parsed);
+  const target = resolveWriteTarget(await resolveTarget(parsed));
+  const forward = writeForwardTarget(target, parsed);
   const echo: string[] = ["wf", "submit"];
   if (from) echo.push(`--from ${from.kind}/${from.name}`);
   else echo.push(shellQuote(files[0]));
@@ -1265,6 +1288,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
         dry_run: true,
         action: "wf submit",
         target: describeTarget(target),
+        defaulted: target.defaulted === true,
         writable: gate.writable,
         source: source.description,
         workflow: workflowName,
@@ -1297,7 +1321,7 @@ export async function wfSubmit(args: string[]): Promise<Output> {
       return redacted.value;
     }
 
-    const suffix = targetSuffix(parsed);
+    const suffix = writeTargetSuffix(target, parsed);
     if (existing) {
       return {
         action: "wf submit",

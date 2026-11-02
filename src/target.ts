@@ -22,6 +22,7 @@ export interface Target {
   explicit: { context: boolean; server: boolean; namespace: boolean };
   /** Why the context could not be resolved, when it could not. */
   contextUnavailable?: string;
+  defaulted?: boolean;
 }
 
 export function targetArgsFrom(parsed: ParsedArgs): TargetArgs {
@@ -80,7 +81,9 @@ export async function resolveTarget(parsed: ParsedArgs): Promise<Target> {
   // Context and namespace lookups are independent local reads: run them together.
   // Settle both before awaiting either, so a rejection never goes unhandled.
   const [contextLookup, namespaceLookup] = await Promise.allSettled([
-    !args.context && mode === "kubernetes" ? currentContext() : undefined,
+    !args.context && (mode === "kubernetes" || args.namespace !== undefined)
+      ? currentContext()
+      : undefined,
     !args.namespace && !process.env.ARGO_NAMESPACE
       ? contextNamespace(args.context)
       : undefined,

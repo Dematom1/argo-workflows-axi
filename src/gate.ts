@@ -9,13 +9,116 @@ import { envServer, type Target } from "./target.js";
 /**
  * The write gate (design S3 + S8):
  * - without `--apply` every write is a preview: nothing is sent;
- * - `--apply` needs the target spelled out (`-n` plus `--context`, or
- *   `--argo-server` in Argo Server mode) and never accepts `-A`;
+ * - `--apply` needs a writable target (explicit or uniquely defaulted) and
+ *   never accepts `-A`;
  * - the target must be in the local allowlist file (default: none).
  * Only this module mints the approval the seam requires for a write.
  */
 
 export const APPLY_FLAG = "--apply";
+
+/** Resolve an omitted write target only when the allowlist has one match. */
+export function resolveWriteTarget(target: Target): Target {
+  if (
+    envServer() &&
+    target.mode === "argo-server" &&
+    !target.explicit.server &&
+    (target.explicit.context || target.explicit.namespace)
+  ) {
+    throw axiError(
+      `Kubernetes context=${target.explicit.context ? target.context : (loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.namespace || entry.namespace === target.namespace))?.context ?? target.context ?? "unavailable")} namespace=${target.explicit.namespace ? target.namespace : (loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.context || entry.context === target.context))?.namespace ?? target.namespace)} conflicts with ARGO_SERVER=${envServer()}. unset ARGO_SERVER to use the Kubernetes target, or explicitly pass --argo-server <host:port> to target Argo Server`,
+      "VALIDATION_ERROR",
+      [
+        "Unset ARGO_SERVER to use the Kubernetes target",
+        "Pass --argo-server <host:port> to target Argo Server explicitly",
+      ],
+    );
+  }
+  if (
+    target.explicit.namespace &&
+    (target.explicit.context || target.explicit.server)
+  )
+    return target;
+  const configured = loadConfig().writableTargets;
+  const hasExplicitTarget =
+    target.explicit.context ||
+    target.explicit.server ||
+    target.explicit.namespace;
+  const targets = configured.filter((entry) => {
+    if (target.explicit.server && entry.server !== target.server) return false;
+    if (target.explicit.context && entry.context !== target.context)
+      return false;
+    if (
+      target.explicit.namespace &&
+      entry.namespace !== "*" &&
+      entry.namespace !== target.namespace
+    )
+      return false;
+    return true;
+  });
+  if (hasExplicitTarget && targets.length > 1) {
+    const inferred = targets.filter(
+      (entry) =>
+        (target.explicit.context ||
+          target.explicit.server ||
+          (target.mode === "argo-server"
+            ? entry.server !== undefined && entry.server === target.server
+            : entry.context !== undefined &&
+              entry.context === target.context)) &&
+        (target.explicit.namespace ||
+          entry.namespace === "*" ||
+          entry.namespace === target.namespace),
+    );
+    if (inferred.length === 1) targets.splice(0, targets.length, inferred[0]);
+  }
+  if (targets.length !== 1) {
+    const list = targets.length
+      ? targets
+          .map(
+            (t) =>
+              `  ${t.context ? `context=${t.context}` : `server=${t.server}`} namespace=${t.namespace}`,
+          )
+          .join("\n")
+      : "  (none)";
+    throw axiError(
+      `Cannot determine a writable target (${targets.length} matching):\n${list}`,
+      "VALIDATION_ERROR",
+      ["Pass --context <context> and -n <namespace> explicitly"],
+    );
+  }
+  const chosen = targets[0];
+  if (chosen.namespace === "*" && !target.explicit.namespace) {
+    throw axiError(
+      "The matching writable target allows any namespace; the namespace cannot be defaulted",
+      "VALIDATION_ERROR",
+      ["Pass -n <namespace> explicitly"],
+    );
+  }
+  if (envServer() && !chosen.server) {
+    throw axiError(
+      `Cannot default to a Kubernetes target while ARGO_SERVER is set: ARGO_SERVER=${envServer()} conflicts with context=${chosen.context} namespace=${chosen.namespace}`,
+      "VALIDATION_ERROR",
+      [
+        "Unset ARGO_SERVER to use the Kubernetes target",
+        "Pass --argo-server <host:port> to target Argo Server explicitly",
+      ],
+    );
+  }
+  return {
+    ...target,
+    mode: chosen.server ? "argo-server" : "kubernetes",
+    server: chosen.server,
+    context: chosen.context,
+    namespace:
+      target.explicit.namespace || chosen.namespace === "*"
+        ? target.namespace
+        : chosen.namespace,
+    namespaceSource: target.explicit.namespace
+      ? target.namespaceSource
+      : "default",
+    defaulted: true,
+  };
+}
 
 export interface GateDecision {
   apply: boolean;
@@ -80,16 +183,17 @@ export function checkWrite(
   }
 
   const missing: string[] = [];
-  if (!target.explicit.namespace) missing.push("-n/--namespace");
+  if (!target.explicit.namespace && !target.defaulted)
+    missing.push("-n/--namespace");
   if (target.mode === "argo-server") {
-    if (!target.explicit.server) {
+    if (!target.explicit.server && !target.defaulted) {
       missing.push(
         envServer()
           ? "--argo-server (ARGO_SERVER is set, so argo talks to that server)"
           : "--argo-server",
       );
     }
-  } else if (!target.explicit.context) {
+  } else if (!target.explicit.context && !target.defaulted) {
     missing.push("--context");
   }
   if (missing.length > 0) {
