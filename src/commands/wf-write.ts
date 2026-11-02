@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { constants, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -1005,8 +1007,8 @@ async function applyOutput<T>(
 
 export function namedWrite(key: string): (args: string[]) => Promise<Output> {
   const spec = WRITES[key] as NamedWrite<unknown>;
-  return (args) => {
-    if (args.includes("--help")) return Promise.resolve(spec.help);
+  return async (args) => {
+    if (args.includes("--help")) return spec.help;
     const parsed = parseArgs(args, spec.flags, `argo-workflows-axi ${key}`);
     return withWriteDeadline(
       key,
@@ -1265,6 +1267,42 @@ function readManifest(text: string, namespace: string): WorkflowManifest {
   return wf;
 }
 
+async function readManifestFile(file: string): Promise<Buffer> {
+  // Nonblocking open/read keeps FIFOs off libuv's indefinitely blocked workers.
+  const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const fifo = (await handle.stat()).isFIFO();
+    const chunks: Buffer[] = [];
+    for (;;) {
+      const remaining = writeRemainingMs();
+      if (remaining <= 0)
+        throw axiError(
+          "Overall write deadline expired while reading manifest; no mutation attempted",
+          "TIMEOUT",
+        );
+      const buffer = Buffer.alloc(64 * 1024);
+      try {
+        const { bytesRead } = await handle.read(buffer);
+        if (bytesRead > 0) {
+          chunks.push(buffer.subarray(0, bytesRead));
+          continue;
+        }
+        if (!fifo || chunks.length > 0) return Buffer.concat(chunks);
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EAGAIN"
+        ))
+          throw error;
+      }
+      await delay(Math.min(25, remaining));
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 /** Check the manifest, then lint and submit the user's own bytes so argo alone decodes the spec. */
 async function withManifest<T>(
   file: string,
@@ -1291,7 +1329,7 @@ async function withManifest<T>(
       clearTimeout(timer);
     }
   } else {
-    bytes = readFileSync(file);
+    bytes = await readManifestFile(file);
   }
   const wf = readManifest(bytes.toString("utf-8"), namespace);
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));

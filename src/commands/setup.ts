@@ -174,7 +174,9 @@ export async function setupCommand(
           "code" in error &&
           error.code === "ENOENT"
         ))
-          throw axiError(`Could not read hook file at ${path}`, "FILE_ERROR");
+          errors.push(
+            `${path}: ${error instanceof Error ? error.message : String(error)}`,
+          );
       }
     }
     uninstallSessionStartHooks({

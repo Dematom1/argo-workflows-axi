@@ -1,4 +1,9 @@
 import { decode } from "@toon-format/toon";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { namedWrite } from "../src/commands/wf-write.js";
 import { describe, expect, it } from "vitest";
 import { failedEtl, runningIngest } from "./fixtures/data.js";
 import { argoCalls, json, run, writeCalls } from "./helpers.js";
@@ -13,6 +18,29 @@ const wf = (name: string) => ({
 });
 
 describe("write acceptance and overall deadline", () => {
+  it("returns rejected promises for named-write validation failures", async () => {
+    await expect(
+      namedWrite("wf suspend")(["a", "--unknown"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+    await expect(
+      namedWrite("wf suspend")(["a", "--timeout", "0s"]),
+    ).rejects.toMatchObject({ code: "VALIDATION_ERROR" });
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "times out an unopened FIFO before any mutation",
+    () => {
+      const fifo = join(mkdtempSync(join(tmpdir(), "awf-fifo-")), "manifest");
+      execFileSync("/usr/bin/mkfifo", [fifo]);
+      const result = run(["wf", "submit", fifo, ...target, "--timeout", "1s"], {
+        config,
+      });
+      expect(result.exitCode).toBe(1);
+      expect(decode(result.stdout)).toMatchObject({ code: "TIMEOUT" });
+      expect(writeCalls(result)).toEqual([]);
+      expect(result.stderr).toContain("overall deadline");
+    },
+  );
   it("keeps accepted, unknown and not-attempted items in a partial batch", () => {
     const result = run(
       ["wf", "suspend", "a", "b", "c", ...target, "--timeout", "2s"],

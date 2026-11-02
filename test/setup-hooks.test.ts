@@ -1,6 +1,7 @@
 import {
   chmodSync,
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   symlinkSync,
@@ -79,6 +80,34 @@ describe("setup hooks failures", () => {
     expect(result.stdout).toContain(".codex/hooks.json");
     expect(result.stdout).toContain(".config/opencode/plugins");
     expect(result.stdout).toContain(".claude/settings.json");
+  });
+
+  it("continues uninstalling other hooks when Codex cannot be read", () => {
+    const installed = run(["setup", "hooks"]);
+    expect(installed.exitCode).toBe(0);
+    const plugin = join(
+      installed.home,
+      ".config",
+      "opencode",
+      "plugins",
+      "axi-argo-workflows-axi.js",
+    );
+    expect(existsSync(plugin)).toBe(true);
+    const codex = join(installed.home, ".codex", "hooks.json");
+    chmodSync(codex, 0o000);
+    try {
+      const result = run(["setup", "uninstall"], { home: installed.home });
+      expect(result.exitCode).toBe(1);
+      expect(result.stdout).toContain("code: SETUP_FAILED");
+      expect(result.stdout).toContain(codex);
+      expect(
+        readFileSync(join(installed.home, ".claude", "settings.json"), "utf8"),
+      ).not.toContain("argo-workflows-axi");
+      expect(existsSync(plugin)).toBe(false);
+    } finally {
+      chmodSync(codex, 0o600);
+    }
+    expect(readFileSync(codex, "utf8")).toContain("argo-workflows-axi");
   });
 
   it("persists an executable, shell-safe SessionEnd command", () => {

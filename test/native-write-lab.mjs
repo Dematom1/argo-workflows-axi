@@ -1,10 +1,11 @@
 // Synthetic HTTP protocol lab: packed wrapper + real argo CLI, NOT a cluster.
 // Usage: node test/native-write-lab.mjs <installed-package-dir> <absolute-argo-bin>
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:http";
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -236,6 +237,30 @@ try {
   assert.equal(stdin.exit, 1);
   assert.equal(stdin.output.code, "TIMEOUT");
   assert.equal(stdin.requests.length, 0);
+  const fifo = join(root, "manifest.fifo");
+  execFileSync("/usr/bin/mkfifo", [fifo]);
+  const fifoResult = await run([
+    "wf",
+    "submit",
+    fifo,
+    ...target,
+    "--timeout",
+    "1s",
+  ]);
+  assert.equal(fifoResult.exit, 1);
+  assert.equal(fifoResult.output.code, "TIMEOUT");
+  assert.equal(fifoResult.requests.length, 0);
+  const invalid = await run([
+    "wf",
+    "suspend",
+    "source",
+    "--timeout",
+    "0s",
+    ...target,
+  ]);
+  assert.equal(invalid.exit, 2);
+  assert.equal(invalid.output.code, "VALIDATION_ERROR");
+  assert.equal(invalid.requests.length, 0);
   assert.notEqual(process.getuid?.(), 0, "permission proof must run non-root");
   const installed = await run(["setup", "hooks"]);
   assert.equal(installed.exit, 0);
@@ -251,6 +276,35 @@ try {
   } finally {
     chmodSync(codex, 0o600);
   }
+  const unreadableInstall = await run(["setup", "hooks"]);
+  assert.equal(unreadableInstall.exit, 0);
+  const unreadableCodex = join(unreadableInstall.home, ".codex", "hooks.json");
+  const plugin = join(
+    unreadableInstall.home,
+    ".config",
+    "opencode",
+    "plugins",
+    "axi-argo-workflows-axi.js",
+  );
+  assert(existsSync(plugin));
+  chmodSync(unreadableCodex, 0o000);
+  try {
+    const denied = await run(["setup", "uninstall"], {
+      reuseHome: unreadableInstall.home,
+    });
+    assert.equal(denied.exit, 1);
+    assert.equal(denied.output.code, "SETUP_FAILED");
+    assert(
+      !readFileSync(
+        join(unreadableInstall.home, ".claude", "settings.json"),
+        "utf8",
+      ).includes("argo-workflows-axi"),
+    );
+    assert(!existsSync(plugin));
+  } finally {
+    chmodSync(unreadableCodex, 0o600);
+  }
+  assert(readFileSync(unreadableCodex, "utf8").includes("argo-workflows-axi"));
   const removed = await run(["setup", "uninstall"], {
     reuseHome: installed.home,
   });
