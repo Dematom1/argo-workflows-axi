@@ -117,6 +117,18 @@ argo-workflows-axi is read-first. It can make only the writes listed above, and 
 4. **Names only, at most 20 per call.** No label selectors, `--all` or `--older` on writes.
 5. **Idempotent.** Asking for a state that already exists is an in-band no-op with exit 0 (`already_completed`, `already_suspended`, `not_suspended`, `already_running`, `nothing_to_retry`). `wf submit --name <name>` reports `already_exists` instead of creating a duplicate; without `--name`, the preview warns that each `--apply` creates a new workflow. `wf resubmit` derives a stable key from the source workflow UID and generation, creates the copy under a deterministic name with that key as a label, and reuses it on retries. Pass `--key <key>` to choose the key, or `--new` to advance to the next generation and create another copy. Argo's native `--memoized` resubmit is not retry-safe, so it is allowed only with `--new`; without `--new` the command rejects it. With `--priority`, Kubernetes mode patches the newly created workflow after resubmission, so the priority is best effort: the controller may schedule the workflow before the patch lands. This option is unavailable in Argo Server mode.
 
+### Write acceptance and deadlines
+
+Writes acknowledge accepted requests, not workflow completion. Use `wf get <name>` to inspect the workflow and `wf wait <name>` to wait separately. Cron writes point to `cron get <name>` instead.
+
+Every write has one overall `--timeout` budget (default `120s`, range `1s` to `10m`), shared by target lookup, preflight, and all batch items. Each subprocess also retains its shorter request limit. Progress appears immediately and every five seconds on stderr. Stdout contains only the structured final result.
+
+**Migration:** named writes now return `suspend_requested`, `resume_requested`, or `retry_requested` instead of claiming the resulting state. Their `phase_before` is the preflight observation, not a post-write phase. There is no post-write status read. Created workflows report the phase from the acceptance response, or `unobserved` when it is absent.
+
+Batch rows distinguish `accepted`, `failed`, `not_attempted`, `unknown`, and `no_op`. Resubmits retain the source name and created name. A created memoized workflow whose priority patch fails has status `accepted_follow_up_failed` and exits nonzero; creation is not rolled back. An accepted response without an identifiable generated name reports `accepted_identity_unknown` and suggests listing workflows.
+
+A timed-out or disconnected write may already have been accepted. `WRITE_OUTCOME_UNKNOWN` is not a rejection: inspect the same target before retrying, especially for unnamed submits and memoized resubmits. An expired batch does not start remaining mutations and lists each unattempted item. Partial batches exit 1 while retaining all item results.
+
 Everything else is refused with a reason and the human route instead of failing as an unknown command: `wf delete` (held back from this release), `auth token` (prints a bearer token), `server`, `node set`, `sync`, `cp`, `watch`, cron and template create/update/delete, `cron backfill`, archive writes, and any raw `api` passthrough. Under the hood, a single exec seam (`src/seam.ts`) runs only operations registered in `src/registry.ts`, checks every flag against the operation's declared set, and runs a write only with an approval that only the write gate (`src/gate.ts`) can mint. Tests check that every process the CLI starts across its commands is a registered operation, and that the seam refuses writes without a gate-minted approval for that operation.
 
 ### Sensitive data
@@ -136,7 +148,7 @@ Nothing streams or follows. `wf wait` is bounded and tells the agent to wait aga
 
 ## Errors and exit codes
 
-Errors go to stdout as `error`, `code` and `help` lines. Exit code 0 means the tool did what was asked, including no-ops and unhealthy workflows (a failed workflow is data, not an error). Exit code 1 means the request could not be met, and 2 means a usage error. Codes: `VALIDATION_ERROR`, `AUTH_REQUIRED`, `FORBIDDEN`, `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_REQUEST`, `RATE_LIMITED`, `SERVER_UNREACHABLE`, `CONTEXT_NOT_FOUND`, `TIMEOUT`, `REFUSED`, `UNSUPPORTED_IN_MODE`, `CONFIG_INVALID`, `ARGO_NOT_INSTALLED`, `WRITE_FAILED`, `UNKNOWN`.
+Errors go to stdout as `error`, `code` and `help` lines. Exit code 0 means the tool did what was asked, including no-ops and unhealthy workflows (a failed workflow is data, not an error). Exit code 1 means the request could not be met, and 2 means a usage error. Codes: `VALIDATION_ERROR`, `AUTH_REQUIRED`, `FORBIDDEN`, `NOT_FOUND`, `ALREADY_EXISTS`, `INVALID_REQUEST`, `RATE_LIMITED`, `SERVER_UNREACHABLE`, `CONTEXT_NOT_FOUND`, `TIMEOUT`, `REFUSED`, `UNSUPPORTED_IN_MODE`, `CONFIG_INVALID`, `ARGO_NOT_INSTALLED`, `WRITE_FAILED`, `WRITE_OUTCOME_UNKNOWN`, `UNKNOWN`.
 
 When authentication fails, the tool says to ask the user to log in. An agent cannot complete SSO.
 

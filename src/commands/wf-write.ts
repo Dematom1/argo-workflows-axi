@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { constants, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { open } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -42,7 +44,13 @@ import {
 } from "../gate.js";
 import { redactText, redactValue } from "../redact.js";
 import type { WriteOperationId } from "../registry.js";
-import { parseJsonStream, runWrite } from "../seam.js";
+import {
+  parseJsonStream,
+  runWrite,
+  withWriteDeadline,
+  writeDeadlineExpired,
+  writeRemainingMs,
+} from "../seam.js";
 import {
   describeTarget,
   forwardTarget,
@@ -60,7 +68,7 @@ import {
   type Parameter,
   type Workflow,
 } from "../workflow.js";
-import { isStdinPath, lintFiles } from "./wf-read.js";
+import { isStdinPath, lintFiles, parseTimeout } from "./wf-read.js";
 
 /**
  * Gated writes (design W3 minus `wf delete`, S3, S8, S15, W5, W6).
@@ -73,6 +81,7 @@ export const MAX_NAMES = 20;
 
 const WRITE_FLAGS: FlagSpec = mergeSpecs(TARGET_FLAGS, ALL_NAMESPACES_FLAG, {
   bool: [APPLY_FLAG],
+  value: ["--timeout"],
 });
 
 const TARGET_HELP =
@@ -167,7 +176,7 @@ function usageHelp(
   return `command: argo-workflows-axi ${cmd}
 description: ${description}. Previews by default; nothing changes without --apply.
 flags:
-${[...flags, "  --apply: Run the write (target must be in the local allowlist; defaults to the sole matching target)", TARGET_HELP].join("\n")}
+${[...flags, "  --timeout <dur>: Overall request/batch deadline including preflight (default 120s, 1s–10m); does not wait for completion", "  --apply: Run the write (target must be in the local allowlist; defaults to the sole matching target)", TARGET_HELP].join("\n")}
 examples[${examples.length}]:
 
 ${examples.map((e) => `  - ${e}`).join("\n")}
@@ -182,7 +191,7 @@ export const WRITES: Record<
     op: "wf.suspend",
     noun: "wf",
     verb: "suspend",
-    done: "suspended",
+    done: "suspend_requested",
     flags: WRITE_FLAGS,
     help: usageHelp(
       "wf suspend <name...>",
@@ -206,7 +215,7 @@ export const WRITES: Record<
     op: "wf.resume",
     noun: "wf",
     verb: "resume",
-    done: "resumed",
+    done: "resume_requested",
     flags: mergeSpecs(WRITE_FLAGS, { value: ["--node-field-selector"] }),
     help: usageHelp(
       "wf resume <name...>",
@@ -300,7 +309,7 @@ export const WRITES: Record<
     op: "wf.retry",
     noun: "wf",
     verb: "retry",
-    done: "retried",
+    done: "retry_requested",
     flags: mergeSpecs(WRITE_FLAGS, {
       value: ["--node-field-selector"],
       repeatable: ["--parameter"],
@@ -429,7 +438,7 @@ export const WRITES: Record<
     op: "cron.suspend",
     noun: "cron",
     verb: "suspend",
-    done: "suspended",
+    done: "suspend_requested",
     flags: WRITE_FLAGS,
     help: usageHelp(
       "cron suspend <name...>",
@@ -452,7 +461,7 @@ export const WRITES: Record<
     op: "cron.resume",
     noun: "cron",
     verb: "resume",
-    done: "resumed",
+    done: "resume_requested",
     flags: WRITE_FLAGS,
     help: usageHelp(
       "cron resume <name...>",
@@ -496,6 +505,36 @@ const RESUBMIT_SOURCE_LABEL = "axi.argoproj.io/resubmit-source";
 const RESUBMIT_KEY_LABEL = "axi.argoproj.io/resubmit-key";
 const RESUBMIT_GENERATION_LABEL = "axi.argoproj.io/resubmit-generation";
 
+function acceptedWorkflow(stdout: string): { name?: string; phase: string } {
+  try {
+    const value: unknown = parseJsonStream(stdout)[0];
+    if (typeof value !== "object" || value === null || !("metadata" in value))
+      return { phase: "unobserved" };
+    const metadata = value.metadata;
+    if (
+      typeof metadata !== "object" ||
+      metadata === null ||
+      !("name" in metadata) ||
+      typeof metadata.name !== "string"
+    )
+      return { phase: "unobserved" };
+    assertName(metadata.name, "created workflow", "wf get <name>");
+    const status = "status" in value ? value.status : undefined;
+    return {
+      name: metadata.name,
+      phase:
+        typeof status === "object" &&
+        status !== null &&
+        "phase" in status &&
+        typeof status.phase === "string"
+          ? status.phase
+          : "unobserved",
+    };
+  } catch {
+    return { phase: "unobserved" };
+  }
+}
+
 function shortHash(value: string): string {
   return createHash("sha256").update(value).digest("hex").slice(0, 20);
 }
@@ -511,28 +550,34 @@ async function applyResubmits(
   let failures = 0;
   const suffix = writeTargetSuffix(target, parsed);
   for (const row of rows) {
-    if (row.plan.blocked) {
+    if (row.plan.blocked || writeDeadlineExpired()) {
       failures += 1;
       results.push({
         name: row.name,
-        result: `failed - ${row.plan.blocked}`,
+        result:
+          row.plan.blocked ?? "overall deadline expired; no mutation attempted",
+        status: "not_attempted",
         phase: row.phase,
       });
       continue;
     }
+    let acceptedName: string | undefined;
+    let mutationAttempted = false;
     try {
       const source = await fetchWorkflow(row.name, forward);
       if (hasFlag(parsed, "--memoized")) {
         const priority = flagValue(parsed, "--priority");
+        mutationAttempted = true;
         const { stdout } = await runWrite(
           "wf.resubmit-native",
           [row.name, "--memoized", ...parameterArgs(parsed), "--output=json"],
           gate.approval!,
           { target: forward },
         );
-        const resubmitted = parseJsonStream(stdout)[0] as Workflow | undefined;
-        const createdName = resubmitted?.metadata.name;
-        const name = createdName ?? "(unknown)";
+        const resubmitted = acceptedWorkflow(stdout);
+        const createdName = resubmitted.name;
+        acceptedName = createdName ?? "(unknown)";
+        const name = acceptedName;
         if (priority !== undefined && !createdName) {
           throw axiError(
             `Native memoized resubmit likely created a workflow, but its name is unknown; priority ${priority} was not applied. Remedy: kubectl get workflows --context=${target.context} -n ${target.namespace} -l workflows.argoproj.io/resubmitted-from-workflow=${row.name}, then kubectl patch workflow <created-name> --context=${target.context} -n ${target.namespace} --type=merge --patch='{"spec":{"priority":${Number(priority)}}}'.`,
@@ -564,7 +609,9 @@ async function applyResubmits(
         results.push({
           name,
           result: `created ${name} (memoized; not retry-safe)`,
-          phase: resubmitted ? phaseOf(resubmitted) : "Pending",
+          source: row.name,
+          status: createdName ? "accepted" : "accepted_identity_unknown",
+          phase: resubmitted.phase,
         });
         continue;
       }
@@ -636,6 +683,8 @@ async function applyResubmits(
         results.push({
           name,
           result: `reused existing ${name}`,
+          source: row.name,
+          status: "no_op",
           phase: phaseOf(existing),
         });
         continue;
@@ -670,7 +719,8 @@ async function applyResubmits(
       try {
         writeFileSync(path, stringify(workflow), { mode: 0o600 });
         try {
-          await runWrite(
+          mutationAttempted = true;
+          const { stdout } = await runWrite(
             "wf.resubmit",
             [
               path,
@@ -681,7 +731,15 @@ async function applyResubmits(
             gate.approval!,
             { target: forward },
           );
-          results.push({ name, result: `created ${name}`, phase: "Pending" });
+          const created = acceptedWorkflow(stdout);
+          acceptedName = created.name ?? name;
+          results.push({
+            name: acceptedName,
+            source: row.name,
+            result: `created ${acceptedName}`,
+            status: "accepted",
+            phase: created.phase,
+          });
         } catch (error) {
           if (errorCode(error) !== "ALREADY_EXISTS") throw error;
           const reused = await fetchWorkflow(name, forward);
@@ -689,6 +747,8 @@ async function applyResubmits(
           results.push({
             name,
             result: `reused existing ${name}`,
+            source: row.name,
+            status: "no_op",
             phase: phaseOf(reused),
           });
         }
@@ -698,8 +758,14 @@ async function applyResubmits(
     } catch (error) {
       failures += 1;
       results.push({
-        name: row.name,
-        result: `failed - ${errorCode(error) ?? "UNKNOWN"}: ${errorMessage(error)}`,
+        name: acceptedName ?? row.name,
+        source: row.name,
+        result: `${acceptedName ? "created, follow-up failed" : "failed"} - ${errorCode(error) ?? "UNKNOWN"}: ${errorMessage(error)}`,
+        status: acceptedName
+          ? "accepted_follow_up_failed"
+          : mutationAttempted
+            ? writeFailureStatus(error)
+            : "not_attempted",
         phase: row.phase,
       });
     }
@@ -710,6 +776,12 @@ async function applyResubmits(
     results,
     help: [
       `Run \`argo-workflows-axi wf get <name>${suffix}\` to check progress`,
+      `Run \`argo-workflows-axi wf wait <name>${suffix}\` to wait separately for completion`,
+      ...(results.some((result) => result.name === "(unknown)")
+        ? [
+            `Run \`argo-workflows-axi wf list${suffix}\` to find the accepted copy; do not blindly resubmit`,
+          ]
+        : []),
     ],
   };
   if (failures > 0) {
@@ -718,6 +790,17 @@ async function applyResubmits(
     process.exitCode = 1;
   }
   return out;
+}
+
+function writeFailureStatus(error: unknown): string {
+  const code = errorCode(error);
+  return code === "WRITE_OUTCOME_UNKNOWN" ||
+    code === "SERVER_UNREACHABLE" ||
+    code === "UNKNOWN"
+    ? "unknown"
+    : code === "TIMEOUT"
+      ? "not_attempted"
+      : "failed";
 }
 
 function targetLine(target: Target): string {
@@ -769,6 +852,9 @@ async function runNamedWrite<T>(
     spec.verb,
     ...names,
     ...spec.echoArgs(parsed),
+    ...(flagValue(parsed, "--timeout")
+      ? [`--timeout ${shellQuote(flagValue(parsed, "--timeout")!)}`]
+      : []),
   ].join(" ");
   const writeOp =
     spec.op === "wf.resubmit" && hasFlag(parsed, "--memoized")
@@ -851,7 +937,22 @@ async function applyOutput<T>(
   let failures = 0;
   for (const row of rows) {
     if (row.plan.noop) {
-      results.push({ name: row.name, result: row.plan.noop, phase: row.phase });
+      results.push({
+        name: row.name,
+        result: row.plan.noop,
+        phase_before: row.phase,
+        status: "no_op",
+      });
+      continue;
+    }
+    if (writeDeadlineExpired()) {
+      failures += 1;
+      results.push({
+        name: row.name,
+        result: "overall deadline expired; no mutation attempted",
+        phase_before: row.phase,
+        status: "not_attempted",
+      });
       continue;
     }
     if (row.plan.blocked) {
@@ -859,7 +960,8 @@ async function applyOutput<T>(
       results.push({
         name: row.name,
         result: `failed - ${row.plan.blocked}`,
-        phase: row.phase,
+        phase_before: row.phase,
+        status: "not_attempted",
       });
       continue;
     }
@@ -867,21 +969,19 @@ async function applyOutput<T>(
       await runWrite(spec.op, [row.name, ...argoArgs], gate.approval!, {
         target: forward,
       });
-      let phase = row.phase;
-      if (spec.noun === "wf") {
-        try {
-          phase = phaseOf(await fetchWorkflow(row.name, forward));
-        } catch {
-          // The write succeeded; the follow-up read is best effort.
-        }
-      }
-      results.push({ name: row.name, result: spec.done, phase });
+      results.push({
+        name: row.name,
+        result: spec.done,
+        phase_before: row.phase,
+        status: "accepted",
+      });
     } catch (error) {
       failures += 1;
       results.push({
         name: row.name,
         result: `failed - ${errorCode(error) ?? "UNKNOWN"}: ${errorMessage(error)}`,
-        phase: row.phase,
+        phase_before: row.phase,
+        status: writeFailureStatus(error),
       });
     }
   }
@@ -907,7 +1007,15 @@ async function applyOutput<T>(
 
 export function namedWrite(key: string): (args: string[]) => Promise<Output> {
   const spec = WRITES[key] as NamedWrite<unknown>;
-  return (args) => runNamedWrite(spec, args);
+  return async (args) => {
+    if (args.includes("--help")) return spec.help;
+    const parsed = parseArgs(args, spec.flags, `argo-workflows-axi ${key}`);
+    return withWriteDeadline(
+      key,
+      parseTimeout(flagValue(parsed, "--timeout")) * 1000,
+      () => runNamedWrite(spec, args),
+    );
+  };
 }
 
 // ---------------------------------------------------------------- wf submit
@@ -1159,13 +1267,70 @@ function readManifest(text: string, namespace: string): WorkflowManifest {
   return wf;
 }
 
+async function readManifestFile(file: string): Promise<Buffer> {
+  // Nonblocking open/read keeps FIFOs off libuv's indefinitely blocked workers.
+  const handle = await open(file, constants.O_RDONLY | constants.O_NONBLOCK);
+  try {
+    const fifo = (await handle.stat()).isFIFO();
+    const chunks: Buffer[] = [];
+    for (;;) {
+      const remaining = writeRemainingMs();
+      if (remaining <= 0)
+        throw axiError(
+          "Overall write deadline expired while reading manifest; no mutation attempted",
+          "TIMEOUT",
+        );
+      const buffer = Buffer.alloc(64 * 1024);
+      try {
+        const { bytesRead } = await handle.read(buffer);
+        if (bytesRead > 0) {
+          chunks.push(buffer.subarray(0, bytesRead));
+          continue;
+        }
+        if (!fifo || chunks.length > 0) return Buffer.concat(chunks);
+      } catch (error) {
+        if (!(
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EAGAIN"
+        ))
+          throw error;
+      }
+      await delay(Math.min(25, remaining));
+    }
+  } finally {
+    await handle.close();
+  }
+}
+
 /** Check the manifest, then lint and submit the user's own bytes so argo alone decodes the spec. */
 async function withManifest<T>(
   file: string,
   namespace: string,
   fn: (manifest: Manifest) => Promise<T>,
 ): Promise<T> {
-  const bytes = readFileSync(isStdinPath(file) ? 0 : file);
+  let bytes: Buffer;
+  if (isStdinPath(file)) {
+    const timer = setTimeout(
+      () =>
+        process.stdin.destroy(
+          axiError(
+            "Overall write deadline expired while reading stdin; no mutation attempted",
+            "TIMEOUT",
+          ),
+        ),
+      Math.max(1, writeRemainingMs()),
+    );
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
+      bytes = Buffer.concat(chunks);
+    } finally {
+      clearTimeout(timer);
+    }
+  } else {
+    bytes = await readManifestFile(file);
+  }
   const wf = readManifest(bytes.toString("utf-8"), namespace);
   const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-"));
   const path = join(dir, "manifest.yaml");
@@ -1196,6 +1361,16 @@ async function submitSourceFromFile(
 
 export async function wfSubmit(args: string[]): Promise<Output> {
   if (args.includes("--help")) return WF_SUBMIT_HELP;
+  const parsed = parseArgs(args, SUBMIT_SPEC, "argo-workflows-axi wf submit");
+  return withWriteDeadline(
+    "wf submit",
+    parseTimeout(flagValue(parsed, "--timeout")) * 1000,
+    () => submitWithinDeadline(args),
+  );
+}
+
+async function submitWithinDeadline(args: string[]): Promise<Output> {
+  if (args.includes("--help")) return WF_SUBMIT_HELP;
   const usage = "argo-workflows-axi wf submit <file|-> | --from <kind>/<name>";
   const parsed = parseArgs(args, SUBMIT_SPEC, usage);
   const files = requirePositionals(parsed, 0, 1, usage);
@@ -1225,6 +1400,8 @@ export async function wfSubmit(args: string[]): Promise<Output> {
   if (from) echo.push(`--from ${from.kind}/${from.name}`);
   else echo.push(shellQuote(files[0]));
   echo.push(...echoParameters(parsed));
+  const timeout = flagValue(parsed, "--timeout");
+  if (timeout) echo.push(`--timeout ${shellQuote(timeout)}`);
   const passthrough: Array<[string, string | undefined]> = [
     ["--name", name],
     ["--generate-name", generateName],
@@ -1349,12 +1526,12 @@ export async function wfSubmit(args: string[]): Promise<Output> {
         .map(([flag, v]) => `${flag}=${v}`),
       "--output=json",
     ];
-    let created: Workflow | undefined;
+    let created: ReturnType<typeof acceptedWorkflow>;
     try {
       const { stdout } = await runWrite("wf.submit", argoArgs, gate.approval!, {
         target: forward,
       });
-      created = parseJsonStream(stdout)[0] as Workflow | undefined;
+      created = acceptedWorkflow(stdout);
     } catch (error) {
       if (errorCode(error) === "ALREADY_EXISTS" && finalName) {
         return {
@@ -1367,20 +1544,37 @@ export async function wfSubmit(args: string[]): Promise<Output> {
           ],
         };
       }
+      if (errorCode(error) === "WRITE_OUTCOME_UNKNOWN")
+        throw axiError(
+          `${errorMessage(error)}. Target: ${describeTarget(target)}`,
+          "WRITE_OUTCOME_UNKNOWN",
+          [
+            finalName
+              ? `Run \`argo-workflows-axi wf get ${finalName}${suffix}\` before retrying`
+              : `Run \`argo-workflows-axi wf list${suffix}\` to find a possible accepted workflow; do not blindly resubmit`,
+          ],
+        );
       throw error;
     }
-    const createdName = created?.metadata?.name ?? finalName ?? "(unknown)";
+    const createdName = created.name ?? finalName;
+    const followName = createdName ?? "<name>";
     return {
       action: "wf submit",
       target: describeTarget(target),
       result: "submitted",
+      status: createdName ? "accepted" : "accepted_identity_unknown",
       workflow: {
-        name: createdName,
-        phase: created ? phaseOf(created) : "Pending",
+        name: createdName ?? "(unknown)",
+        phase: created.phase,
       },
       help: [
-        `Run \`argo-workflows-axi wf wait ${createdName}${suffix}\` to wait (bounded) for it to finish`,
-        `Run \`argo-workflows-axi wf get ${createdName}${suffix}\` for its progress`,
+        ...(createdName
+          ? []
+          : [
+              `Run \`argo-workflows-axi wf list${suffix}\` to find the accepted workflow; do not blindly resubmit`,
+            ]),
+        `Run \`argo-workflows-axi wf wait ${followName}${suffix}\` to wait (bounded) for it to finish`,
+        `Run \`argo-workflows-axi wf get ${followName}${suffix}\` for its progress`,
       ],
     };
   };

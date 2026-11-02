@@ -484,7 +484,9 @@ describe("write gate", () => {
       },
     );
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("ingest-q9w8e,suspended,Running");
+    expect(result.stdout).toContain(
+      "ingest-q9w8e,suspend_requested,Running,accepted",
+    );
     expect(writeCalls(result)[0]).toContain(
       "--argo-server=argo.example.internal:2746",
     );
@@ -996,7 +998,9 @@ describe("cron suspend/resume", () => {
       },
     );
     expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain("weekly-cleanup,resumed,suspended");
+    expect(result.stdout).toContain(
+      "weekly-cleanup,resume_requested,suspended,accepted",
+    );
     expect(writeCalls(result)).toEqual([
       [
         "cron",

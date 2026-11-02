@@ -21,6 +21,7 @@ export type ErrorCode =
   | "CONFIG_INVALID"
   | "FILE_ERROR"
   | "SETUP_FAILED"
+  | "WRITE_OUTCOME_UNKNOWN"
   | "TIMEOUT"
   | "UNKNOWN";
 
