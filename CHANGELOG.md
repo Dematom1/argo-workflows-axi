@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.12](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.11...argo-workflows-axi-v0.1.12) (2026-11-02)
+
+
+### Features
+
+* **writes:** default to the sole writable target ([#35](https://github.com/Dematom1/argo-workflows-axi/issues/35)) ([dbfc160](https://github.com/Dematom1/argo-workflows-axi/commit/dbfc160b9516426cef2348b2a66e46aa711e1b84))
+
 ## [0.1.11](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.10...argo-workflows-axi-v0.1.11) (2026-11-01)
 
 
