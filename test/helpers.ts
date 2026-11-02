@@ -49,6 +49,7 @@ export interface RunOptions {
   claudeSettings?: string;
   claudeSettingsMode?: number;
   claudeSettingsSymlink?: boolean;
+  readonlyClaude?: boolean;
   readonlyCodex?: boolean;
   readonlyConfig?: boolean;
   umask?: number;
@@ -59,6 +60,7 @@ export interface RunOptions {
 
 export interface RunResult {
   stdout: string;
+  stderr: string;
   exitCode: number;
   calls: Call[];
   home: string;
@@ -133,6 +135,10 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
       );
     if (options.claudeSettingsSymlink) symlinkSync(targetPath, settingsPath);
   }
+  if (options.readonlyClaude) {
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    chmodSync(join(home, ".claude"), 0o555);
+  }
   if (options.readonlyCodex) {
     mkdirSync(join(home, ".codex"), { recursive: true });
     chmodSync(join(home, ".codex"), 0o555);
@@ -173,7 +179,13 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
         .filter(Boolean)
         .map((line) => JSON.parse(line) as Call)
     : [];
-  return { stdout: result.stdout, exitCode: result.status ?? -1, calls, home };
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.status ?? -1,
+    calls,
+    home,
+  };
 }
 
 export function argoCalls(result: RunResult): string[][] {

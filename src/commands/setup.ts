@@ -136,6 +136,16 @@ function ctxEntrypoint(): string {
     );
   return candidate;
 }
+function sessionEndCommand(): string {
+  const entrypoint = realpathSync(process.argv[1] ?? "").replace(/'/g, "'\\''");
+  return `'${entrypoint}' context end # ${MARKER}`;
+}
+function agentForError(message: string): string {
+  if (message.includes("/.claude/")) return "claude";
+  if (message.includes("/.codex/")) return "codex";
+  if (message.includes("/.config/opencode/")) return "opencode";
+  return "unknown";
+}
 
 export async function setupCommand(
   args: string[],
@@ -149,7 +159,7 @@ export async function setupCommand(
       `Run \`${usage}\``,
     ]);
   const settingsPath = join(homedir(), ".claude", "settings.json");
-  const markerCommand = `${ctxEntrypoint()} context end # ${MARKER}`;
+  const markerCommand = sessionEndCommand();
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
     validateSessionEnd(initial);
@@ -207,10 +217,7 @@ export async function setupCommand(
     writeSettings(settingsPath, installedSettings);
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    throw axiError(
-      `Hook setup failed for claude; file errors: ${settingsPath}: ${detail}`,
-      "FILE_ERROR",
-    );
+    errors.push(`${settingsPath}: ${detail}`);
   }
   const status = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const finalSettings = readSettings(settingsPath);
@@ -230,7 +237,7 @@ export async function setupCommand(
     .map(([agent]) => agent);
   if (errors.length || failedAgents.length) {
     throw axiError(
-      `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map((error) => error.split(":")[0])])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
+      `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map(agentForError)])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
       "SETUP_FAILED",
     );
   }
