@@ -157,11 +157,14 @@ export async function setupCommand(
     const settings = readSettings(settingsPath);
     const groups = validateSessionEnd(settings);
     if (settings.hooks) {
+      const legacyMarkerCommand = `${CTX_BIN} context end # ${MARKER}`;
       const remaining = groups.flatMap((group) => {
         if (!Array.isArray(group.hooks)) return [group];
         const hooks = group.hooks as Hook[];
         const kept = hooks.filter(
-          (hook) => !hook.command?.includes(markerCommand),
+          (hook) =>
+            !hook.command?.includes(markerCommand) &&
+            !hook.command?.includes(legacyMarkerCommand),
         );
         return kept.length || hooks.length === 0
           ? [{ ...group, hooks: kept }]
