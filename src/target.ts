@@ -81,8 +81,7 @@ export async function resolveTarget(parsed: ParsedArgs): Promise<Target> {
   // Context and namespace lookups are independent local reads: run them together.
   // Settle both before awaiting either, so a rejection never goes unhandled.
   const [contextLookup, namespaceLookup] = await Promise.allSettled([
-    !args.context &&
-    (mode === "kubernetes" || args.namespace !== undefined)
+    !args.context && (mode === "kubernetes" || args.namespace !== undefined)
       ? currentContext()
       : undefined,
     !args.namespace && !process.env.ARGO_NAMESPACE

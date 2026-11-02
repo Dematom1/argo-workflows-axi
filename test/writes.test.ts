@@ -159,10 +159,13 @@ describe("write gate", () => {
     expect(implicit.stdout).toContain("Pass -n <namespace> explicitly");
     expect(argoCalls(implicit)).toEqual([]);
 
-    const explicit = run(["wf", "stop", "ingest-q9w8e", "-n", "prod", "--apply"], {
-      responses: [...READS, { match: ["stop", "ingest-q9w8e"], stdout: "" }],
-      config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
-    });
+    const explicit = run(
+      ["wf", "stop", "ingest-q9w8e", "-n", "prod", "--apply"],
+      {
+        responses: [...READS, { match: ["stop", "ingest-q9w8e"], stdout: "" }],
+        config: { writableTargets: [{ context: "kind-dev", namespace: "*" }] },
+      },
+    );
     expect(explicit.exitCode).toBe(0);
     expect(writeCalls(explicit)).toHaveLength(1);
   });

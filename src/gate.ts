@@ -26,7 +26,7 @@ export function resolveWriteTarget(target: Target): Target {
     (target.explicit.context || target.explicit.namespace)
   ) {
     throw axiError(
-      `Kubernetes context=${target.explicit.context ? target.context : loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.namespace || entry.namespace === target.namespace))?.context ?? target.context ?? "unavailable"} namespace=${target.explicit.namespace ? target.namespace : loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.context || entry.context === target.context))?.namespace ?? target.namespace} conflicts with ARGO_SERVER=${envServer()}. unset ARGO_SERVER to use the Kubernetes target, or explicitly pass --argo-server <host:port> to target Argo Server`,
+      `Kubernetes context=${target.explicit.context ? target.context : (loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.namespace || entry.namespace === target.namespace))?.context ?? target.context ?? "unavailable")} namespace=${target.explicit.namespace ? target.namespace : (loadConfig().writableTargets.find((entry) => entry.context && (!target.explicit.context || entry.context === target.context))?.namespace ?? target.namespace)} conflicts with ARGO_SERVER=${envServer()}. unset ARGO_SERVER to use the Kubernetes target, or explicitly pass --argo-server <host:port> to target Argo Server`,
       "VALIDATION_ERROR",
       [
         "Unset ARGO_SERVER to use the Kubernetes target",
