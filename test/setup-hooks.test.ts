@@ -14,6 +14,17 @@ import { describe, expect, it } from "vitest";
 import { BIN, run } from "./helpers.js";
 
 describe("setup hooks failures", () => {
+  it("repairs SessionStart without dereferencing malformed groups or commands", () => {
+    const malformed = [null, "legacy", { hooks: [null, { command: 42, marker: "argo-workflows-axi" }] }];
+    const result = run(["setup", "hooks"], {
+      claudeSettings: JSON.stringify({ hooks: { SessionStart: malformed } }),
+    });
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    const settings = JSON.parse(
+      readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
+    );
+    expect(settings.hooks.SessionStart.slice(0, malformed.length)).toEqual(malformed);
+  });
   it("classifies unreadable settings as FILE_ERROR, not absent or UNKNOWN", () => {
     const result = run(["setup", "uninstall"], {
       claudeSettings: "{}",

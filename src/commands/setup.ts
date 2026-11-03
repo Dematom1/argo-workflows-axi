@@ -261,10 +261,10 @@ export async function setupCommand(
   const sessionStart = installedSettings.hooks?.SessionStart;
   if (Array.isArray(sessionStart)) {
     let kept = false;
-    installedSettings.hooks.SessionStart = sessionStart.flatMap((group: Group) => {
-      if (!Array.isArray(group.hooks)) return [group];
-      const hooks = (group.hooks as Hook[]).flatMap((hook) => {
-        if (!hook.command?.includes(MARKER)) return [hook];
+    installedSettings.hooks.SessionStart = sessionStart.flatMap((group: unknown) => {
+      if (typeof group !== "object" || group === null || Array.isArray(group) || !Array.isArray(group.hooks)) return [group];
+      const hooks = group.hooks.flatMap((hook: unknown) => {
+        if (typeof hook !== "object" || hook === null || Array.isArray(hook) || typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
         if (kept) return [];
         kept = true;
         return [{ ...hook, command: hook.command.startsWith("/") ? shellQuote(hook.command) : hook.command }];
