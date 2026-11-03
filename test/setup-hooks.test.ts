@@ -175,12 +175,17 @@ describe("setup hooks failures", () => {
       readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
     );
     const command = settings.hooks.SessionEnd[0].hooks[0].command;
+    const sessionStartCommand = settings.hooks.SessionStart[0].hooks[0].command;
     expect(command).toContain("axi installed package");
     expect(command).toContain("' context end # argo-workflows-axi");
-    const invoked = spawnSync("/bin/sh", ["-c", command], {
-      env: { ...process.env, HOME: result.home },
-      encoding: "utf8",
-    });
-    expect(invoked.status).toBe(0);
+    expect(sessionStartCommand.startsWith("'")).toBe(true);
+    expect(sessionStartCommand.endsWith("'")).toBe(true);
+    for (const hookCommand of [command, sessionStartCommand]) {
+      const invoked = spawnSync("/bin/sh", ["-c", hookCommand], {
+        env: { ...process.env, HOME: result.home },
+        encoding: "utf8",
+      });
+      expect(invoked.status, invoked.stderr).toBe(0);
+    }
   });
 });

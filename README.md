@@ -80,6 +80,8 @@ You only need one of these.
 | `setup hooks`                                                             | Install hooks; report installed, already installed, or stale per provider; uninstall removes them                    |
 | `update`                                                                  | Upgrade the tool                                                                                                     |
 
+`CLAUDE_CONFIG_DIR` is not fully supported for hooks. `setup hooks` reads and writes SessionEnd in the selected directory, but axi-sdk-js 0.1.13 installs and checks SessionStart under `~/.claude`. Use the default Claude config directory until the SDK supports a selected settings path.
+
 Writes (preview unless `--apply`): `wf submit`, `wf retry`, `wf resubmit`, `wf stop`, `wf terminate`, `wf suspend`, `wf resume`, `cron suspend`, `cron resume`.
 
 Flags use argo's own names: `-n/--namespace`, `-A/--all-namespaces` (reads only), `--context`, `-s/--argo-server`, `-l/--selector`, `-p/--parameter`, `--node-field-selector`, `--since`, `--tail`, `--grep`, and so on. Unknown flags are rejected before anything runs, with the valid flags listed. Every command has `--help` in TOON; commands with flags or examples document them there.

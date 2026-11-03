@@ -316,7 +316,13 @@ export async function setupCommand(
             return [hook];
           if (kept || !hook.command.includes(execPath)) return [];
           kept = true;
-          return [hook];
+          return [
+            {
+              ...hook,
+              command:
+                hook.command === execPath ? shellQuote(execPath) : hook.command,
+            },
+          ];
         });
         return hooks.length || candidate.hooks.length === 0
           ? [{ ...candidate, hooks }]
