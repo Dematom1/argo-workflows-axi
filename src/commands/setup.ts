@@ -246,9 +246,10 @@ export async function setupCommand(
   validateSessionEnd(settings);
   const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const errors: string[] = [];
+  const execPath = ctxEntrypoint();
   installSessionStartHooks({
     marker: MARKER,
-    execPath: ctxEntrypoint(),
+    execPath,
     // Keep the resolved entrypoint absolute: a bare name may disappear outside npx's temporary PATH.
     binaryNames: [],
     distEntrypoints: [`dist/bin/${CTX_BIN}.js`],
@@ -265,7 +266,7 @@ export async function setupCommand(
       if (typeof group !== "object" || group === null || Array.isArray(group) || !Array.isArray(group.hooks)) return [group];
       const hooks = group.hooks.flatMap((hook: unknown) => {
         if (typeof hook !== "object" || hook === null || Array.isArray(hook) || typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
-        if (kept) return [];
+        if (kept || !hook.command.includes(execPath)) return [];
         kept = true;
         return [hook];
       });
