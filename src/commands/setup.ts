@@ -40,7 +40,7 @@ function readSettings(path: string): Settings {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
-    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [`Check permissions with [0mchmod u+rw '${path}'[0m, then retry setup`]);
+    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [`Check permissions with chmod u+rw '${path}', then retry setup`]);
   }
   try {
     const parsed: unknown = JSON.parse(contents);
@@ -139,9 +139,11 @@ function ctxEntrypoint(): string {
     );
   return candidate;
 }
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
 function sessionEndCommand(): string {
-  const entrypoint = realpathSync(process.argv[1] ?? "").replace(/'/g, "'\\''");
-  return `'${entrypoint}' context end # ${MARKER}`;
+  return `${shellQuote(realpathSync(process.argv[1] ?? ""))} context end # ${MARKER}`;
 }
 function agentForError(message: string): string {
   if (message.includes("/.claude/")) return "claude";
@@ -247,12 +249,29 @@ export async function setupCommand(
   installSessionStartHooks({
     marker: MARKER,
     execPath: ctxEntrypoint(),
-    binaryNames: [CTX_BIN],
+    // Keep the resolved entrypoint absolute: a bare name may disappear outside npx's temporary PATH.
+    binaryNames: [],
     distEntrypoints: [`dist/bin/${CTX_BIN}.js`],
     scope: "user",
     onError: (message) => errors.push(message),
   });
   const installedSettings = readSettings(settingsPath);
+  installedSettings.hooks ??= {};
+  // axi-sdk-js updates only the first matching legacy entry; discard later duplicates locally.
+  const sessionStart = installedSettings.hooks?.SessionStart;
+  if (Array.isArray(sessionStart)) {
+    let kept = false;
+    installedSettings.hooks.SessionStart = sessionStart.flatMap((group: Group) => {
+      if (!Array.isArray(group.hooks)) return [group];
+      const hooks = (group.hooks as Hook[]).flatMap((hook) => {
+        if (!hook.command?.includes(MARKER)) return [hook];
+        if (kept) return [];
+        kept = true;
+        return [{ ...hook, command: hook.command.startsWith("/") ? shellQuote(hook.command) : hook.command }];
+      });
+      return hooks.length || group.hooks.length === 0 ? [{ ...group, hooks }] : [];
+    });
+  }
   const installedGroups = validateSessionEnd(installedSettings);
   installedSettings.hooks ??= {};
   const retained = installedGroups.flatMap((group) => {
