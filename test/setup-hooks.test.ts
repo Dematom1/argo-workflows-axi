@@ -15,7 +15,11 @@ import { BIN, run } from "./helpers.js";
 
 describe("setup hooks failures", () => {
   it("repairs SessionStart without dereferencing malformed groups or commands", () => {
-    const malformed = [null, "legacy", { hooks: [null, { command: 42, marker: "argo-workflows-axi" }] }];
+    const malformed = [
+      null,
+      "legacy",
+      { hooks: [null, { command: 42, marker: "argo-workflows-axi" }] },
+    ];
     const result = run(["setup", "hooks"], {
       claudeSettings: JSON.stringify({ hooks: { SessionStart: malformed } }),
     });
@@ -25,12 +29,22 @@ describe("setup hooks failures", () => {
     );
     expect(settings.hooks.SessionStart).toContain(null);
     expect(settings.hooks.SessionStart).toContain("legacy");
-    expect(settings.hooks.SessionStart.some((group: unknown) =>
-      typeof group === "object" && group !== null && "hooks" in group &&
-      Array.isArray(group.hooks) && group.hooks.some((hook: unknown) =>
-        typeof hook === "object" && hook !== null && "command" in hook && hook.command === 42,
+    expect(
+      settings.hooks.SessionStart.some(
+        (group: unknown) =>
+          typeof group === "object" &&
+          group !== null &&
+          "hooks" in group &&
+          Array.isArray(group.hooks) &&
+          group.hooks.some(
+            (hook: unknown) =>
+              typeof hook === "object" &&
+              hook !== null &&
+              "command" in hook &&
+              hook.command === 42,
+          ),
       ),
-    )).toBe(true);
+    ).toBe(true);
   });
   it("classifies unreadable settings as FILE_ERROR, not absent or UNKNOWN", () => {
     const result = run(["setup", "uninstall"], {

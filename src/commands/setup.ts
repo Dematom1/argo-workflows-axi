@@ -40,7 +40,9 @@ function readSettings(path: string): Settings {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
-    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [`Check permissions with chmod u+rw '${path}', then retry setup`]);
+    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [
+      `Check permissions with chmod u+rw '${path}', then retry setup`,
+    ]);
   }
   try {
     const parsed: unknown = JSON.parse(contents);
@@ -163,7 +165,10 @@ export async function setupCommand(
     throw axiError(`Unknown setup command: ${sub}`, "VALIDATION_ERROR", [
       `Run \`${usage}\``,
     ]);
-  const settingsPath = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
+  const settingsPath = join(
+    process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
+    "settings.json",
+  );
   const markerCommand = sessionEndCommand();
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
@@ -230,7 +235,9 @@ export async function setupCommand(
       throw axiError(
         `Hook uninstall failed${errors.length ? `; file errors: ${errors.join("; ")}` : "; managed hooks remain"}`,
         "SETUP_FAILED",
-        ["Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks` or `setup uninstall`"],
+        [
+          "Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks` or `setup uninstall`",
+        ],
       );
     return {
       setup: "hook removal verified",
@@ -248,12 +255,20 @@ export async function setupCommand(
   const groups = settings.hooks?.SessionStart;
   if (Array.isArray(groups)) {
     settings.hooks!.SessionStart = groups.flatMap((group) => {
-      if (typeof group !== "object" || group === null || Array.isArray(group) || !Array.isArray(group.hooks)) {
+      if (
+        typeof group !== "object" ||
+        group === null ||
+        Array.isArray(group) ||
+        !Array.isArray(group.hooks)
+      ) {
         malformedSessionStart.push(group);
         return [];
       }
       const valid = group.hooks.filter((hook: unknown) => {
-        const ok = typeof hook === "object" && hook !== null && !Array.isArray(hook) &&
+        const ok =
+          typeof hook === "object" &&
+          hook !== null &&
+          !Array.isArray(hook) &&
           (!("command" in hook) || typeof hook.command === "string");
         if (!ok) malformedSessionStart.push({ ...group, hooks: [hook] });
         return ok;
@@ -280,20 +295,35 @@ export async function setupCommand(
   const sessionStart = installedSettings.hooks?.SessionStart;
   if (Array.isArray(sessionStart)) {
     let kept = false;
-    installedSettings.hooks.SessionStart = [...sessionStart.flatMap((group: unknown) => {
-      if (typeof group !== "object" || group === null || Array.isArray(group)) return [group];
-      const candidate = group as Group;
-      if (!Array.isArray(candidate.hooks)) return [group];
-      const hooks = candidate.hooks.flatMap((value: unknown) => {
-        if (typeof value !== "object" || value === null || Array.isArray(value)) return [value];
-        const hook = value as Hook;
-        if (typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
-        if (kept || !hook.command.includes(execPath)) return [];
-        kept = true;
-        return [hook];
-      });
-      return hooks.length || candidate.hooks.length === 0 ? [{ ...candidate, hooks }] : [];
-    }), ...malformedSessionStart];
+    installedSettings.hooks.SessionStart = [
+      ...sessionStart.flatMap((group: unknown) => {
+        if (typeof group !== "object" || group === null || Array.isArray(group))
+          return [group];
+        const candidate = group as Group;
+        if (!Array.isArray(candidate.hooks)) return [group];
+        const hooks = candidate.hooks.flatMap((value: unknown) => {
+          if (
+            typeof value !== "object" ||
+            value === null ||
+            Array.isArray(value)
+          )
+            return [value];
+          const hook = value as Hook;
+          if (
+            typeof hook.command !== "string" ||
+            !hook.command.includes(MARKER)
+          )
+            return [hook];
+          if (kept || !hook.command.includes(execPath)) return [];
+          kept = true;
+          return [hook];
+        });
+        return hooks.length || candidate.hooks.length === 0
+          ? [{ ...candidate, hooks }]
+          : [];
+      }),
+      ...malformedSessionStart,
+    ];
   }
   const installedGroups = validateSessionEnd(installedSettings);
   installedSettings.hooks ??= {};
@@ -334,7 +364,9 @@ export async function setupCommand(
     throw axiError(
       `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map(agentForError)])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
       "SETUP_FAILED",
-      ["Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks`"],
+      [
+        "Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks`",
+      ],
     );
   }
   return {
