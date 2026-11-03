@@ -14,6 +14,38 @@ import { describe, expect, it } from "vitest";
 import { BIN, run } from "./helpers.js";
 
 describe("setup hooks failures", () => {
+  it("repairs SessionStart without dereferencing malformed groups or commands", () => {
+    const malformed = [
+      null,
+      "legacy",
+      { hooks: [null, { command: 42, marker: "argo-workflows-axi" }] },
+    ];
+    const result = run(["setup", "hooks"], {
+      claudeSettings: JSON.stringify({ hooks: { SessionStart: malformed } }),
+    });
+    expect(result.exitCode, `${result.stdout}\n${result.stderr}`).toBe(0);
+    const settings = JSON.parse(
+      readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
+    );
+    expect(settings.hooks.SessionStart).toContain(null);
+    expect(settings.hooks.SessionStart).toContain("legacy");
+    expect(
+      settings.hooks.SessionStart.some(
+        (group: unknown) =>
+          typeof group === "object" &&
+          group !== null &&
+          "hooks" in group &&
+          Array.isArray(group.hooks) &&
+          group.hooks.some(
+            (hook: unknown) =>
+              typeof hook === "object" &&
+              hook !== null &&
+              "command" in hook &&
+              hook.command === 42,
+          ),
+      ),
+    ).toBe(true);
+  });
   it("classifies unreadable settings as FILE_ERROR, not absent or UNKNOWN", () => {
     const result = run(["setup", "uninstall"], {
       claudeSettings: "{}",
@@ -143,12 +175,17 @@ describe("setup hooks failures", () => {
       readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
     );
     const command = settings.hooks.SessionEnd[0].hooks[0].command;
+    const sessionStartCommand = settings.hooks.SessionStart[0].hooks[0].command;
     expect(command).toContain("axi installed package");
     expect(command).toContain("' context end # argo-workflows-axi");
-    const invoked = spawnSync("/bin/sh", ["-c", command], {
-      env: { ...process.env, HOME: result.home },
-      encoding: "utf8",
-    });
-    expect(invoked.status).toBe(0);
+    expect(sessionStartCommand.startsWith("'")).toBe(true);
+    expect(sessionStartCommand.endsWith("'")).toBe(true);
+    for (const hookCommand of [command, sessionStartCommand]) {
+      const invoked = spawnSync("/bin/sh", ["-c", hookCommand], {
+        env: { ...process.env, HOME: result.home },
+        encoding: "utf8",
+      });
+      expect(invoked.status, invoked.stderr).toBe(0);
+    }
   });
 });

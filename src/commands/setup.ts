@@ -40,7 +40,9 @@ function readSettings(path: string): Settings {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
-    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR");
+    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [
+      `Check permissions with chmod u+rw '${path}', then retry setup`,
+    ]);
   }
   try {
     const parsed: unknown = JSON.parse(contents);
@@ -51,6 +53,7 @@ function readSettings(path: string): Settings {
     throw axiError(
       `Could not parse Claude settings at ${path}`,
       "VALIDATION_ERROR",
+      ["Fix the JSON syntax in Claude settings.json and retry"],
     );
   }
 }
@@ -64,6 +67,7 @@ function validateSessionEnd(settings: Settings): Group[] {
     throw axiError(
       "Claude settings hooks must be an object",
       "VALIDATION_ERROR",
+      ["Edit Claude settings.json so hooks is a JSON object, then retry"],
     );
   const groups = settings.hooks.SessionEnd;
   if (groups === undefined) return [];
@@ -87,6 +91,7 @@ function validateSessionEnd(settings: Settings): Group[] {
     throw axiError(
       "Claude settings hooks.SessionEnd must be an array of groups",
       "VALIDATION_ERROR",
+      ["Fix hooks.SessionEnd in Claude settings.json, then retry setup"],
     );
   return groups as Group[];
 }
@@ -136,9 +141,11 @@ function ctxEntrypoint(): string {
     );
   return candidate;
 }
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, "'\\''")}'`;
+}
 function sessionEndCommand(): string {
-  const entrypoint = realpathSync(process.argv[1] ?? "").replace(/'/g, "'\\''");
-  return `'${entrypoint}' context end # ${MARKER}`;
+  return `${shellQuote(realpathSync(process.argv[1] ?? ""))} context end # ${MARKER}`;
 }
 function agentForError(message: string): string {
   if (message.includes("/.claude/")) return "claude";
@@ -158,7 +165,10 @@ export async function setupCommand(
     throw axiError(`Unknown setup command: ${sub}`, "VALIDATION_ERROR", [
       `Run \`${usage}\``,
     ]);
-  const settingsPath = join(homedir(), ".claude", "settings.json");
+  const settingsPath = join(
+    process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
+    "settings.json",
+  );
   const markerCommand = sessionEndCommand();
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
@@ -225,6 +235,9 @@ export async function setupCommand(
       throw axiError(
         `Hook uninstall failed${errors.length ? `; file errors: ${errors.join("; ")}` : "; managed hooks remain"}`,
         "SETUP_FAILED",
+        [
+          "Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks` or `setup uninstall`",
+        ],
       );
     return {
       setup: "hook removal verified",
@@ -238,17 +251,86 @@ export async function setupCommand(
 
   const settings = readSettings(settingsPath);
   validateSessionEnd(settings);
+  const malformedSessionStart: unknown[] = [];
+  const groups = settings.hooks?.SessionStart;
+  if (Array.isArray(groups)) {
+    settings.hooks!.SessionStart = groups.flatMap((group) => {
+      if (
+        typeof group !== "object" ||
+        group === null ||
+        Array.isArray(group) ||
+        !Array.isArray(group.hooks)
+      ) {
+        malformedSessionStart.push(group);
+        return [];
+      }
+      const valid = group.hooks.filter((hook: unknown) => {
+        const ok =
+          typeof hook === "object" &&
+          hook !== null &&
+          !Array.isArray(hook) &&
+          (!("command" in hook) || typeof hook.command === "string");
+        if (!ok) malformedSessionStart.push({ ...group, hooks: [hook] });
+        return ok;
+      });
+      return valid.length ? [{ ...group, hooks: valid }] : [];
+    });
+    writeSettings(settingsPath, settings);
+  }
   const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const errors: string[] = [];
+  const execPath = ctxEntrypoint();
   installSessionStartHooks({
     marker: MARKER,
-    execPath: ctxEntrypoint(),
-    binaryNames: [CTX_BIN],
+    execPath,
+    // Keep the resolved entrypoint absolute: a bare name may disappear outside npx's temporary PATH.
+    binaryNames: [],
     distEntrypoints: [`dist/bin/${CTX_BIN}.js`],
     scope: "user",
     onError: (message) => errors.push(message),
   });
   const installedSettings = readSettings(settingsPath);
+  installedSettings.hooks ??= {};
+  // axi-sdk-js updates only the first matching legacy entry; discard later duplicates locally.
+  const sessionStart = installedSettings.hooks?.SessionStart;
+  if (Array.isArray(sessionStart)) {
+    let kept = false;
+    installedSettings.hooks.SessionStart = [
+      ...sessionStart.flatMap((group: unknown) => {
+        if (typeof group !== "object" || group === null || Array.isArray(group))
+          return [group];
+        const candidate = group as Group;
+        if (!Array.isArray(candidate.hooks)) return [group];
+        const hooks = candidate.hooks.flatMap((value: unknown) => {
+          if (
+            typeof value !== "object" ||
+            value === null ||
+            Array.isArray(value)
+          )
+            return [value];
+          const hook = value as Hook;
+          if (
+            typeof hook.command !== "string" ||
+            !hook.command.includes(MARKER)
+          )
+            return [hook];
+          if (kept || !hook.command.includes(execPath)) return [];
+          kept = true;
+          return [
+            {
+              ...hook,
+              command:
+                hook.command === execPath ? shellQuote(execPath) : hook.command,
+            },
+          ];
+        });
+        return hooks.length || candidate.hooks.length === 0
+          ? [{ ...candidate, hooks }]
+          : [];
+      }),
+      ...malformedSessionStart,
+    ];
+  }
   const installedGroups = validateSessionEnd(installedSettings);
   installedSettings.hooks ??= {};
   const retained = installedGroups.flatMap((group) => {
@@ -288,6 +370,9 @@ export async function setupCommand(
     throw axiError(
       `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map(agentForError)])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
       "SETUP_FAILED",
+      [
+        "Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks`",
+      ],
     );
   }
   return {
