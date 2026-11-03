@@ -244,6 +244,24 @@ export async function setupCommand(
 
   const settings = readSettings(settingsPath);
   validateSessionEnd(settings);
+  const malformedSessionStart: unknown[] = [];
+  const groups = settings.hooks?.SessionStart;
+  if (Array.isArray(groups)) {
+    settings.hooks!.SessionStart = groups.flatMap((group) => {
+      if (typeof group !== "object" || group === null || Array.isArray(group) || !Array.isArray(group.hooks)) {
+        malformedSessionStart.push(group);
+        return [];
+      }
+      const valid = group.hooks.filter((hook: unknown) => {
+        const ok = typeof hook === "object" && hook !== null && !Array.isArray(hook) &&
+          (!("command" in hook) || typeof hook.command === "string");
+        if (!ok) malformedSessionStart.push({ ...group, hooks: [hook] });
+        return ok;
+      });
+      return valid.length ? [{ ...group, hooks: valid }] : [];
+    });
+    writeSettings(settingsPath, settings);
+  }
   const before = sessionStartHookStatus({ marker: MARKER, scope: "user" });
   const errors: string[] = [];
   const execPath = ctxEntrypoint();
@@ -262,16 +280,20 @@ export async function setupCommand(
   const sessionStart = installedSettings.hooks?.SessionStart;
   if (Array.isArray(sessionStart)) {
     let kept = false;
-    installedSettings.hooks.SessionStart = sessionStart.flatMap((group: unknown) => {
-      if (typeof group !== "object" || group === null || Array.isArray(group) || !Array.isArray(group.hooks)) return [group];
-      const hooks = group.hooks.flatMap((hook: unknown) => {
-        if (typeof hook !== "object" || hook === null || Array.isArray(hook) || typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
+    installedSettings.hooks.SessionStart = [...sessionStart.flatMap((group: unknown) => {
+      if (typeof group !== "object" || group === null || Array.isArray(group)) return [group];
+      const candidate = group as Group;
+      if (!Array.isArray(candidate.hooks)) return [group];
+      const hooks = candidate.hooks.flatMap((value: unknown) => {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return [value];
+        const hook = value as Hook;
+        if (typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
         if (kept || !hook.command.includes(execPath)) return [];
         kept = true;
         return [hook];
       });
-      return hooks.length || group.hooks.length === 0 ? [{ ...group, hooks }] : [];
-    });
+      return hooks.length || candidate.hooks.length === 0 ? [{ ...candidate, hooks }] : [];
+    }), ...malformedSessionStart];
   }
   const installedGroups = validateSessionEnd(installedSettings);
   installedSettings.hooks ??= {};

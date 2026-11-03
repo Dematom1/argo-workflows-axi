@@ -23,7 +23,14 @@ describe("setup hooks failures", () => {
     const settings = JSON.parse(
       readFileSync(join(result.home, ".claude", "settings.json"), "utf8"),
     );
-    expect(settings.hooks.SessionStart.slice(0, malformed.length)).toEqual(malformed);
+    expect(settings.hooks.SessionStart).toContain(null);
+    expect(settings.hooks.SessionStart).toContain("legacy");
+    expect(settings.hooks.SessionStart.some((group: unknown) =>
+      typeof group === "object" && group !== null && "hooks" in group &&
+      Array.isArray(group.hooks) && group.hooks.some((hook: unknown) =>
+        typeof hook === "object" && hook !== null && "command" in hook && hook.command === 42,
+      ),
+    )).toBe(true);
   });
   it("classifies unreadable settings as FILE_ERROR, not absent or UNKNOWN", () => {
     const result = run(["setup", "uninstall"], {
