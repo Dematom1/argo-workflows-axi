@@ -203,7 +203,7 @@ export function buildCommands(): Record<string, AxiCliCommand<undefined>> {
   const commands: Record<string, AxiCliCommand<undefined>> = {
     context: rendered(async (args) => {
       if (args.includes("--help"))
-        return `command: argo-workflows-axi context\ndescription: Internal session context recorder\n`;
+        return `command: argo-workflows-axi context end\ndescription: Record the current session at SessionEnd. This route is called by the hook installed with [0margo-workflows-axi setup hooks[0m; it does not install hooks.\nexamples[1]:\n  - argo-workflows-axi context end\n`;
       if (args[0] === "end") {
         let payload: unknown;
         try {

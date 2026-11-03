@@ -40,7 +40,7 @@ function readSettings(path: string): Settings {
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT")
       return {};
-    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR");
+    throw axiError(`Could not read Claude settings at ${path}`, "FILE_ERROR", [`Check permissions with [0mchmod u+rw '${path}'[0m, then retry setup`]);
   }
   try {
     const parsed: unknown = JSON.parse(contents);
@@ -51,6 +51,7 @@ function readSettings(path: string): Settings {
     throw axiError(
       `Could not parse Claude settings at ${path}`,
       "VALIDATION_ERROR",
+      ["Fix the JSON syntax in Claude settings.json and retry"],
     );
   }
 }
@@ -64,6 +65,7 @@ function validateSessionEnd(settings: Settings): Group[] {
     throw axiError(
       "Claude settings hooks must be an object",
       "VALIDATION_ERROR",
+      ["Edit Claude settings.json so hooks is a JSON object, then retry"],
     );
   const groups = settings.hooks.SessionEnd;
   if (groups === undefined) return [];
@@ -87,6 +89,7 @@ function validateSessionEnd(settings: Settings): Group[] {
     throw axiError(
       "Claude settings hooks.SessionEnd must be an array of groups",
       "VALIDATION_ERROR",
+      ["Fix hooks.SessionEnd in Claude settings.json, then retry setup"],
     );
   return groups as Group[];
 }
@@ -158,7 +161,7 @@ export async function setupCommand(
     throw axiError(`Unknown setup command: ${sub}`, "VALIDATION_ERROR", [
       `Run \`${usage}\``,
     ]);
-  const settingsPath = join(homedir(), ".claude", "settings.json");
+  const settingsPath = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "settings.json");
   const markerCommand = sessionEndCommand();
   if (sub === "uninstall") {
     const initial = readSettings(settingsPath);
@@ -225,6 +228,7 @@ export async function setupCommand(
       throw axiError(
         `Hook uninstall failed${errors.length ? `; file errors: ${errors.join("; ")}` : "; managed hooks remain"}`,
         "SETUP_FAILED",
+        ["Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks` or `setup uninstall`"],
       );
     return {
       setup: "hook removal verified",
@@ -288,6 +292,7 @@ export async function setupCommand(
     throw axiError(
       `Hook setup failed for ${[...new Set([...failedAgents, ...errors.map(agentForError)])].join(", ")}${errors.length ? `; file errors: ${errors.join("; ")}` : ""}`,
       "SETUP_FAILED",
+      ["Check file and directory permissions for Claude, Codex, and OpenCode settings, then rerun `argo-workflows-axi setup hooks`"],
     );
   }
   return {
