@@ -267,7 +267,7 @@ export async function setupCommand(
         if (typeof hook !== "object" || hook === null || Array.isArray(hook) || typeof hook.command !== "string" || !hook.command.includes(MARKER)) return [hook];
         if (kept) return [];
         kept = true;
-        return [{ ...hook, command: hook.command.startsWith("/") ? shellQuote(hook.command) : hook.command }];
+        return [hook];
       });
       return hooks.length || group.hooks.length === 0 ? [{ ...group, hooks }] : [];
     });
