@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { spawn as spawnChild } from "node:child_process";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { performance } from "node:perf_hooks";
 import { axiError, errorCode, errorMessage, mapArgoFailure } from "./errors.js";
@@ -133,73 +133,138 @@ function spawn(
   );
 
   return new Promise((resolve, reject) => {
-    const child = execFile(
-      op.bin,
-      argv,
-      { env, maxBuffer: MAX_BUFFER, timeout: timeoutMs, killSignal: "SIGKILL" },
-      (error, stdout, stderr) => {
-        if (!error) {
-          resolve({ stdout, stderr, exitCode: 0 });
-          return;
+    const child = spawnChild(op.bin, argv, {
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      detached: process.platform !== "win32",
+    });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let bytes = 0;
+    let timedOut = false;
+    let settled = false;
+    let failure: NodeJS.ErrnoException | undefined;
+
+    const kill = () => {
+      if (process.platform !== "win32" && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          child.kill("SIGKILL");
         }
-        const err = error as NodeJS.ErrnoException & {
-          killed?: boolean;
-          signal?: string;
-        };
-        if (err.code === "ENOENT") {
-          reject(
-            op.bin === "argo"
-              ? axiError(
-                  "The argo CLI is not installed or not on PATH",
-                  "ARGO_NOT_INSTALLED",
-                  [
-                    "Ask the user to install the Argo Workflows CLI: https://github.com/argoproj/argo-workflows/releases",
-                  ],
-                )
-              : axiError(
-                  "kubectl is not installed or not on PATH",
-                  "ARGO_NOT_INSTALLED",
-                  [
-                    "Ask the user to install kubectl to resolve the current Kubernetes context",
-                  ],
-                ),
-          );
-          return;
-        }
-        if (err.killed || err.signal === "SIGKILL") {
-          reject(
-            axiError(
-              `${op.bin} ${op.command.join(" ")} did not finish within ${Math.ceil(timeoutMs / 1000)}s${op.tier === "write" ? "; acceptance is unknown; inspect the target before retrying" : ""}`,
-              op.tier === "write" ? "WRITE_OUTCOME_UNKNOWN" : "TIMEOUT",
-              [
-                "Run `argo-workflows-axi ctx` to check the target",
-                "Ask the user whether the cluster or Argo Server is reachable",
-              ],
-            ),
-          );
-          return;
-        }
-        const exitCode = typeof err.code === "number" ? err.code : 1;
-        if (options.allowFailure) {
-          resolve({ stdout, stderr, exitCode });
-          return;
-        }
-        const failure = mapArgoFailure(String(stderr || stdout || err.message));
+      } else {
+        child.kill("SIGKILL");
+      }
+      child.stdout.destroy();
+      child.stderr.destroy();
+      child.unref();
+    };
+    const interrupt = (exitCode: number) => {
+      kill();
+      queueMicrotask(() => process.exit(exitCode));
+    };
+    const onSigint = () => interrupt(130);
+    const onSigterm = () => interrupt(143);
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
+    const cleanup = () => {
+      clearTimeout(timer);
+      process.off("SIGINT", onSigint);
+      process.off("SIGTERM", onSigterm);
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      kill();
+      finish(null);
+    }, timeoutMs);
+    const collect = (sink: Buffer[]) => (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > MAX_BUFFER) {
+        timedOut = true;
+        kill();
+        finish(null);
+      } else {
+        sink.push(chunk);
+      }
+    };
+    child.stdout.on("data", collect(stdout));
+    child.stderr.on("data", collect(stderr));
+    child.on("error", (err: NodeJS.ErrnoException) => {
+      failure = err;
+      finish(null);
+    });
+
+    function finish(code: number | null) {
+      cleanup();
+      if (settled) return;
+      settled = true;
+      const out = Buffer.concat(stdout).toString("utf8");
+      const err = Buffer.concat(stderr).toString("utf8");
+      if (failure?.code === "ENOENT") {
+        reject(
+          op.bin === "argo"
+            ? axiError(
+                "The argo CLI is not installed or not on PATH",
+                "ARGO_NOT_INSTALLED",
+                [
+                  "Ask the user to install the Argo Workflows CLI: https://github.com/argoproj/argo-workflows/releases",
+                ],
+              )
+            : axiError(
+                "kubectl is not installed or not on PATH",
+                "ARGO_NOT_INSTALLED",
+                [
+                  "Ask the user to install kubectl to resolve the current Kubernetes context",
+                ],
+              ),
+        );
+      } else if (timedOut) {
+        reject(
+          axiError(
+            `${op.bin} ${op.command.join(" ")} did not finish within ${Math.ceil(timeoutMs / 1000)}s${op.tier === "write" ? "; acceptance is unknown; inspect the target before retrying" : ""}`,
+            op.tier === "write" ? "WRITE_OUTCOME_UNKNOWN" : "TIMEOUT",
+            [
+              "Run `argo-workflows-axi ctx` to check the target",
+              "Ask the user whether the cluster or Argo Server is reachable",
+            ],
+          ),
+        );
+      } else if (failure) {
+        const mapped = mapArgoFailure(failure.message);
         reject(
           op.tier === "write" &&
-            ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(failure) ?? "")
+            ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(mapped) ?? "")
             ? axiError(
-                `${errorMessage(failure)}; acceptance is unknown; inspect the target before retrying`,
+                `${errorMessage(mapped)}; acceptance is unknown; inspect the target before retrying`,
                 "WRITE_OUTCOME_UNKNOWN",
                 [
                   "Use `argo-workflows-axi wf get <name>` or `cron get <name>` with the same target; do not blindly retry non-idempotent writes",
                 ],
               )
-            : failure,
+            : mapped,
         );
-      },
-    );
-    child.stdin?.end();
+      } else if (code === 0) {
+        resolve({ stdout: out, stderr: err, exitCode: 0 });
+      } else if (options.allowFailure) {
+        resolve({ stdout: out, stderr: err, exitCode: code ?? 1 });
+      } else {
+        const mapped = mapArgoFailure(String(err || out));
+        reject(
+          op.tier === "write" &&
+            ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(mapped) ?? "")
+            ? axiError(
+                `${errorMessage(mapped)}; acceptance is unknown; inspect the target before retrying`,
+                "WRITE_OUTCOME_UNKNOWN",
+                [
+                  "Use `argo-workflows-axi wf get <name>` or `cron get <name>` with the same target; do not blindly retry non-idempotent writes",
+                ],
+              )
+            : mapped,
+        );
+      }
+    }
+    child.on("close", finish);
   });
 }
 
