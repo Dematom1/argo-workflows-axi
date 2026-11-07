@@ -181,7 +181,10 @@ function spawn(
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > MAX_BUFFER) {
-        timedOut = true;
+        failure = Object.assign(
+          new Error(`stdout maxBuffer length exceeded (${MAX_BUFFER})`),
+          { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
+        );
         kill();
         finish(null);
       } else {
