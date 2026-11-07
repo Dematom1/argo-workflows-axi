@@ -179,6 +179,7 @@ function spawn(
       finish(null);
     }, timeoutMs);
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
+      if (settled) return;
       bytes += chunk.length;
       if (bytes > MAX_BUFFER) {
         outputLimitExceeded = true;

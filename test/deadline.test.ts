@@ -152,7 +152,8 @@ setTimeout(() => {}, 8000);
               () =>
                 existsSync(ready) &&
                 existsSync(pids) &&
-                readFileSync(pids, "utf8").trim().split("\n").length === 2,
+                readFileSync(pids, "utf8").trim().split("\n").length ===
+                  (signal ? 2 : 1),
               { timeout: 3000 },
             )
             .toBe(true);
