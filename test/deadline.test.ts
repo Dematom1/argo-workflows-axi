@@ -175,7 +175,9 @@ setTimeout(() => {}, 8000);
           expect(elapsed).toBeGreaterThanOrEqual(1000);
           expect(elapsed).toBeLessThan(2500);
         }
-        if (["grandchild-pipes", "escaped-pipes", "ignore-term"].includes(mode)) {
+        if (
+          ["grandchild-pipes", "escaped-pipes", "ignore-term"].includes(mode)
+        ) {
           await processesExited(2);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.max(0, 2600 - elapsed)),
