@@ -122,6 +122,8 @@ argo-workflows-axi is read-first. It can make only the writes listed above, and 
 
 ### Write acceptance and deadlines
 
+On POSIX, deadlines kill the subprocess's process group; a descendant that starts its own session is outside that boundary.
+
 Writes acknowledge accepted requests, not workflow completion. Use `wf get <name>` to inspect the workflow and `wf wait <name>` to wait separately. Cron writes point to `cron get <name>` instead.
 
 Every write has one overall `--timeout` budget (default `120s`, range `1s` to `10m`), shared by target lookup, preflight, and all batch items. Each subprocess also retains its shorter request limit. Progress appears immediately and every five seconds on stderr. Stdout contains only the structured final result.
