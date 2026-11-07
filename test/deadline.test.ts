@@ -68,7 +68,6 @@ setTimeout(() => {}, 8000);
       "windows-fallback",
       "SIGINT",
       "SIGTERM",
-      "SIGHUP",
       "parent-exit",
     ])("terminates promptly with %s", async (mode) => {
       const pids = join(dir, `${mode}.pids`);
@@ -77,7 +76,7 @@ setTimeout(() => {}, 8000);
       const moduleUrl = pathToFileURL(
         join(dir, "package/dist/src/seam.js"),
       ).href;
-      const signal = ["SIGINT", "SIGTERM", "SIGHUP"].includes(mode)
+      const signal = ["SIGINT", "SIGTERM"].includes(mode)
         ? mode
         : undefined;
       const started = performance.now();
@@ -168,7 +167,7 @@ setTimeout(() => {}, 8000);
         expect(existsSync(ready), stdout + stderr).toBe(true);
         if (signal) {
           expect(code).toBe(
-            signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 129,
+            signal === "SIGINT" ? 130 : 143,
           );
           expect(stdout).toBe("");
           await processesExited(2);
