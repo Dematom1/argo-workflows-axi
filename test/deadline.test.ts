@@ -8,12 +8,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // POSIX signal and process-group fixtures; Windows has no process groups.
@@ -22,6 +19,7 @@ describe.skipIf(process.platform === "win32")(
   () => {
     const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-deadline-"));
     beforeAll(() => {
+      execFileSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit" });
       const tarball = JSON.parse(
         execFileSync(
           "npm",
@@ -70,6 +68,8 @@ setTimeout(() => {}, 8000);
       "windows-fallback",
       "SIGINT",
       "SIGTERM",
+      "SIGHUP",
+      "parent-exit",
     ])("terminates promptly with %s", async (mode) => {
       const pids = join(dir, `${mode}.pids`);
       const ready = join(dir, `${mode}.ready`);
@@ -77,7 +77,9 @@ setTimeout(() => {}, 8000);
       const moduleUrl = pathToFileURL(
         join(dir, "package/dist/src/seam.js"),
       ).href;
-      const signal = mode === "SIGINT" || mode === "SIGTERM" ? mode : undefined;
+      const signal = ["SIGINT", "SIGTERM", "SIGHUP"].includes(mode)
+        ? mode
+        : undefined;
       const started = performance.now();
       const child = spawn(
         process.execPath,
@@ -88,8 +90,10 @@ setTimeout(() => {}, 8000);
         import { runRead } from ${JSON.stringify(moduleUrl)};
         // Exercise the Windows direct-child fallback with real subprocesses on POSIX.
         if (process.env.MODE === 'windows-fallback') Object.defineProperty(process, 'platform', { value: 'win32' });
+        const pending = runRead('wf.list', [], { timeoutMs: ${signal ? 10000 : 1000} });
+        if (process.env.MODE === 'parent-exit') setTimeout(() => process.exit(0), 250);
         try {
-          await runRead('wf.list', [], { timeoutMs: ${signal ? 10000 : 1000} });
+          await pending;
           process.exitCode = 1;
         } catch (error) {
           console.log(error.code);
@@ -116,6 +120,7 @@ setTimeout(() => {}, 8000);
         child.on("error", reject);
         child.on("close", resolve);
       });
+      /** Assert each recorded child has exited, accepting reaped or zombie pids. */
       const processesExited = async (count: number) => {
         const recorded = readFileSync(pids, "utf8").trim().split("\n");
         expect(recorded).toHaveLength(count);
@@ -145,7 +150,7 @@ setTimeout(() => {}, 8000);
         }
       };
       try {
-        if (signal) {
+        if (signal || mode === "parent-exit") {
           await expect
             .poll(
               () =>
@@ -156,20 +161,22 @@ setTimeout(() => {}, 8000);
               { timeout: 3000 },
             )
             .toBe(true);
-          child.kill(signal);
+          if (signal) child.kill(signal);
         }
         const code = await completion;
         const elapsed = performance.now() - started;
         expect(existsSync(ready), stdout + stderr).toBe(true);
         if (signal) {
-          expect(code).toBe(signal === "SIGINT" ? 130 : 143);
+          expect(code).toBe(
+            signal === "SIGINT" ? 130 : signal === "SIGTERM" ? 143 : 129,
+          );
           expect(stdout).toBe("");
           await processesExited(2);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.max(0, 2600 - elapsed)),
           );
           expect(existsSync(survived)).toBe(false);
-        } else {
+        } else if (mode !== "parent-exit") {
           expect(code).toBe(0);
           expect(stdout.trim()).toBe("TIMEOUT");
           expect(elapsed).toBeGreaterThanOrEqual(1000);
@@ -185,6 +192,13 @@ setTimeout(() => {}, 8000);
           expect(existsSync(survived)).toBe(false);
         } else if (mode === "windows-fallback") {
           await processesExited(1);
+        } else if (mode === "parent-exit") {
+          expect(code).toBe(0);
+          await processesExited(2);
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
+          expect(existsSync(survived)).toBe(false);
         }
       } finally {
         child.kill("SIGKILL");

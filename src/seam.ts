@@ -106,6 +106,7 @@ function buildArgv(
   return argv;
 }
 
+/** Run an operation with bounded output and deadline-scoped process cleanup. */
 function spawn(
   op: Operation,
   argv: string[],
@@ -166,12 +167,18 @@ function spawn(
     };
     const onSigint = () => interrupt(130);
     const onSigterm = () => interrupt(143);
+    const onSighup = () => interrupt(129);
+    const onExit = () => kill();
     process.once("SIGINT", onSigint);
     process.once("SIGTERM", onSigterm);
+    if (process.platform !== "win32") process.once("SIGHUP", onSighup);
+    process.once("exit", onExit);
     const cleanup = () => {
       clearTimeout(timer);
       process.off("SIGINT", onSigint);
       process.off("SIGTERM", onSigterm);
+      process.off("SIGHUP", onSighup);
+      process.off("exit", onExit);
     };
     const timer = setTimeout(() => {
       timedOut = true;
