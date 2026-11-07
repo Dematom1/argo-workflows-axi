@@ -47,12 +47,13 @@ appendFileSync(process.env.PIDS, process.pid + '\\n');
 if (['ignore-term', 'windows-fallback'].includes(process.env.MODE)) {
   process.on('SIGTERM', () => {});
 } else {
+  // A background descendant holding inherited pipes remains in this process group.
   const child = spawn(process.execPath, ['-e', \`
     const fs = require('node:fs');
     fs.appendFileSync(process.env.PIDS, process.pid + '\\\\n');
     setTimeout(() => fs.writeFileSync(process.env.SURVIVED, 'alive'), 2300);
     setTimeout(() => {}, 8000);
-  \`], { stdio: ['ignore', 'inherit', 'inherit'], detached: process.env.MODE === 'escaped-pipes' });
+  \`], { stdio: ['ignore', 'inherit', 'inherit'], detached: false });
 }
 writeFileSync(process.env.READY, 'ready');
 setTimeout(() => {}, 8000);
@@ -169,7 +170,7 @@ setTimeout(() => {}, 8000);
           expect(elapsed).toBeGreaterThanOrEqual(1000);
           expect(elapsed).toBeLessThan(2500);
         }
-        if (mode === "grandchild-pipes") {
+        if (mode === "grandchild-pipes" || mode === "escaped-pipes") {
           await descendantsExited();
           await new Promise((resolve) =>
             setTimeout(resolve, Math.max(0, 2600 - elapsed)),
