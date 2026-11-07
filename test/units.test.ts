@@ -12,11 +12,16 @@ import { describe, expect, it } from "vitest";
 import { parseArgs } from "../src/args.js";
 import { shellQuote } from "../src/format.js";
 import { isApprovalFor, mintApproval } from "../src/approval.js";
-import { extractDetail, mapArgoFailure } from "../src/errors.js";
+import { errorCode, extractDetail, mapArgoFailure } from "../src/errors.js";
 import { checkWrite } from "../src/gate.js";
 import { redactText, redactValue } from "../src/redact.js";
 import { OPERATIONS, REFUSALS } from "../src/registry.js";
-import { parseJsonStream, runRead, runWrite } from "../src/seam.js";
+import {
+  mapOperationFailure,
+  parseJsonStream,
+  runRead,
+  runWrite,
+} from "../src/seam.js";
 import type { Target } from "../src/target.js";
 import { podNameOf, type Workflow } from "../src/workflow.js";
 import * as d from "./fixtures/data.js";
@@ -176,6 +181,15 @@ describe("read-only by construction (S5)", () => {
     expect(() => runRead("wf.stop" as never, ["x"])).toThrow(
       /is a write operation/,
     );
+  });
+
+  it("marks write output-limit failures as an unknown write outcome", () => {
+    const error = mapOperationFailure(
+      OPERATIONS["wf.submit"],
+      "stdout maxBuffer length exceeded (536870912)",
+    );
+    expect(errorCode(error)).toBe("WRITE_OUTCOME_UNKNOWN");
+    expect(error.message).toContain("acceptance is unknown");
   });
 
   it("refuses flags not registered for an operation", () => {

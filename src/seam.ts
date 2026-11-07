@@ -40,6 +40,20 @@ export interface ExecResult {
   exitCode: number;
 }
 
+export function mapOperationFailure(op: Operation, message: string) {
+  const mapped = mapArgoFailure(message);
+  return op.tier === "write" &&
+    ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(mapped) ?? "")
+    ? axiError(
+        `${errorMessage(mapped)}; acceptance is unknown; inspect the target before retrying`,
+        "WRITE_OUTCOME_UNKNOWN",
+        [
+          "Use `argo-workflows-axi wf get <name>` or `cron get <name>` with the same target; do not blindly retry non-idempotent writes",
+        ],
+      )
+    : mapped;
+}
+
 const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_BUFFER = 512 * 1024 * 1024;
 
@@ -144,7 +158,6 @@ function spawn(
     const stderr: Buffer[] = [];
     let bytes = 0;
     let timedOut = false;
-    let outputLimitExceeded = false;
     let settled = false;
     let failure: NodeJS.ErrnoException | undefined;
 
@@ -186,7 +199,6 @@ function spawn(
       if (settled) return;
       bytes += chunk.length;
       if (bytes > MAX_BUFFER) {
-        outputLimitExceeded = true;
         failure = Object.assign(
           new Error(`stdout maxBuffer length exceeded (${MAX_BUFFER})`),
           { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
@@ -240,20 +252,7 @@ function spawn(
           ),
         );
       } else if (failure) {
-        const mapped = mapArgoFailure(failure.message);
-        reject(
-          op.tier === "write" &&
-            !outputLimitExceeded &&
-            ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(mapped) ?? "")
-            ? axiError(
-                `${errorMessage(mapped)}; acceptance is unknown; inspect the target before retrying`,
-                "WRITE_OUTCOME_UNKNOWN",
-                [
-                  "Use `argo-workflows-axi wf get <name>` or `cron get <name>` with the same target; do not blindly retry non-idempotent writes",
-                ],
-              )
-            : mapped,
-        );
+        reject(mapOperationFailure(op, failure.message));
       } else if (code === 0) {
         resolve({ stdout: out, stderr: err, exitCode: 0 });
       } else if (options.allowFailure) {
