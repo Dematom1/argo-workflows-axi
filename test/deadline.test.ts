@@ -1,0 +1,212 @@
+import { execFileSync, spawn } from "node:child_process";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// POSIX signal and process-group fixtures; Windows has no process groups.
+describe.skipIf(process.platform === "win32")(
+  "packed subprocess deadlines",
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-deadline-"));
+    beforeAll(() => {
+      execFileSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit" });
+      const tarball = JSON.parse(
+        execFileSync(
+          "npm",
+          ["pack", "--ignore-scripts", "--json", "--pack-destination", dir],
+          {
+            cwd: ROOT,
+            encoding: "utf8",
+          },
+        ),
+      );
+      execFileSync("tar", ["-xzf", join(dir, tarball[0].filename), "-C", dir]);
+      symlinkSync(
+        join(ROOT, "node_modules"),
+        join(dir, "package/node_modules"),
+        "dir",
+      );
+      writeFileSync(
+        join(dir, "argo"),
+        `#!${process.execPath}
+import { spawn } from 'node:child_process';
+import { appendFileSync, writeFileSync } from 'node:fs';
+appendFileSync(process.env.PIDS, process.pid + '\\n');
+if (process.env.MODE === 'ignore-term') process.on('SIGTERM', () => {});
+if (process.env.MODE !== 'windows-fallback') {
+  // A background descendant holding inherited pipes remains in this process group.
+  const child = spawn(process.execPath, ['-e', \`
+    const fs = require('node:fs');
+    fs.appendFileSync(process.env.PIDS, process.pid + '\\\\n');
+    setTimeout(() => fs.writeFileSync(process.env.SURVIVED, 'alive'), 2300);
+    setTimeout(() => {}, 8000);
+  \`], { stdio: ['ignore', 'inherit', 'inherit'], detached: false });
+}
+writeFileSync(process.env.READY, 'ready');
+if (process.env.MODE === 'escaped-pipes') process.exit(0);
+setTimeout(() => {}, 8000);
+`,
+        { mode: 0o755 },
+      );
+    });
+    afterAll(() => rmSync(dir, { recursive: true, force: true }));
+
+    it.each([
+      "grandchild-pipes",
+      "ignore-term",
+      "escaped-pipes",
+      "windows-fallback",
+      "SIGINT",
+      "SIGTERM",
+      "parent-exit",
+    ])("terminates promptly with %s", async (mode) => {
+      const pids = join(dir, `${mode}.pids`);
+      const ready = join(dir, `${mode}.ready`);
+      const survived = join(dir, `${mode}.survived`);
+      const moduleUrl = pathToFileURL(
+        join(dir, "package/dist/src/seam.js"),
+      ).href;
+      const signal = ["SIGINT", "SIGTERM"].includes(mode) ? mode : undefined;
+      const started = performance.now();
+      const child = spawn(
+        process.execPath,
+        [
+          "--input-type=module",
+          "-e",
+          `
+        import { runRead } from ${JSON.stringify(moduleUrl)};
+        // Exercise the Windows direct-child fallback with real subprocesses on POSIX.
+        if (process.env.MODE === 'windows-fallback') Object.defineProperty(process, 'platform', { value: 'win32' });
+        const pending = runRead('wf.list', [], { timeoutMs: ${signal ? 10000 : 1000} });
+        if (process.env.MODE === 'parent-exit') setTimeout(() => process.exit(0), 250);
+        try {
+          await pending;
+          process.exitCode = 1;
+        } catch (error) {
+          console.log(error.code);
+        }
+      `,
+        ],
+        {
+          env: {
+            PATH: dir,
+            HOME: dir,
+            MODE: mode,
+            PIDS: pids,
+            READY: ready,
+            SURVIVED: survived,
+          },
+          stdio: ["ignore", "pipe", "pipe"],
+        },
+      );
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (chunk) => (stdout += chunk));
+      child.stderr.on("data", (chunk) => (stderr += chunk));
+      const completion = new Promise<number | null>((resolve, reject) => {
+        child.on("error", reject);
+        child.on("close", resolve);
+      });
+      /** Assert each recorded child has exited, accepting reaped or zombie pids. */
+      const processesExited = async (count: number) => {
+        const recorded = readFileSync(pids, "utf8").trim().split("\n");
+        expect(recorded).toHaveLength(count);
+        for (const pid of recorded) {
+          await expect
+            .poll(
+              () => {
+                try {
+                  const state = execFileSync("ps", ["-o", "stat=", "-p", pid], {
+                    encoding: "utf8",
+                  }).trim();
+                  return state === "" || state.startsWith("Z");
+                } catch (error) {
+                  if (
+                    error &&
+                    typeof error === "object" &&
+                    "status" in error &&
+                    error.status === 1
+                  )
+                    return true;
+                  throw error;
+                }
+              },
+              { timeout: 1000 },
+            )
+            .toBe(true);
+        }
+      };
+      try {
+        if (signal || mode === "parent-exit") {
+          await expect
+            .poll(
+              () =>
+                existsSync(ready) &&
+                existsSync(pids) &&
+                readFileSync(pids, "utf8").trim().split("\n").length ===
+                  (mode === "windows-fallback" ? 1 : 2),
+              { timeout: 3000 },
+            )
+            .toBe(true);
+          if (signal) child.kill(signal);
+        }
+        const code = await completion;
+        const elapsed = performance.now() - started;
+        expect(existsSync(ready), stdout + stderr).toBe(true);
+        if (signal) {
+          expect(code).toBe(signal === "SIGINT" ? 130 : 143);
+          expect(stdout).toBe("");
+          await processesExited(2);
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
+          expect(existsSync(survived)).toBe(false);
+        } else if (mode !== "parent-exit") {
+          expect(code).toBe(0);
+          expect(stdout.trim()).toBe("TIMEOUT");
+          expect(elapsed).toBeGreaterThanOrEqual(1000);
+          expect(elapsed).toBeLessThan(2500);
+        }
+        if (
+          ["grandchild-pipes", "escaped-pipes", "ignore-term"].includes(mode)
+        ) {
+          await processesExited(2);
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
+          expect(existsSync(survived)).toBe(false);
+        } else if (mode === "windows-fallback") {
+          await processesExited(1);
+        } else if (mode === "parent-exit") {
+          expect(code).toBe(0);
+          await processesExited(2);
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
+          expect(existsSync(survived)).toBe(false);
+        }
+      } finally {
+        child.kill("SIGKILL");
+        if (existsSync(pids)) {
+          for (const pid of readFileSync(pids, "utf8").trim().split("\n")) {
+            try {
+              process.kill(Number(pid), "SIGKILL");
+            } catch {
+              /* Already exited. */
+            }
+          }
+        }
+      }
+    });
+  },
+);
