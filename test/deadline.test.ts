@@ -44,9 +44,8 @@ describe.skipIf(process.platform === "win32")(
 import { spawn } from 'node:child_process';
 import { appendFileSync, writeFileSync } from 'node:fs';
 appendFileSync(process.env.PIDS, process.pid + '\\n');
+if (process.env.MODE === 'ignore-term') process.on('SIGTERM', () => {});
 if (process.env.MODE !== 'windows-fallback') {
-  process.on('SIGTERM', () => {});
-} else {
   // A background descendant holding inherited pipes remains in this process group.
   const child = spawn(process.execPath, ['-e', \`
     const fs = require('node:fs');
