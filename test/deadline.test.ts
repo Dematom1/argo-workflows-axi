@@ -44,7 +44,7 @@ describe.skipIf(process.platform === "win32")(
 import { spawn } from 'node:child_process';
 import { appendFileSync, writeFileSync } from 'node:fs';
 appendFileSync(process.env.PIDS, process.pid + '\\n');
-if (['ignore-term', 'windows-fallback'].includes(process.env.MODE)) {
+if (process.env.MODE !== 'windows-fallback') {
   process.on('SIGTERM', () => {});
 } else {
   // A background descendant holding inherited pipes remains in this process group.
@@ -117,9 +117,9 @@ setTimeout(() => {}, 8000);
         child.on("error", reject);
         child.on("close", resolve);
       });
-      const descendantsExited = async () => {
+      const processesExited = async (count: number) => {
         const recorded = readFileSync(pids, "utf8").trim().split("\n");
-        expect(recorded).toHaveLength(2);
+        expect(recorded).toHaveLength(count);
         for (const pid of recorded) {
           await expect
             .poll(
@@ -152,7 +152,8 @@ setTimeout(() => {}, 8000);
               () =>
                 existsSync(ready) &&
                 existsSync(pids) &&
-                readFileSync(pids, "utf8").trim().split("\n").length === 2,
+                readFileSync(pids, "utf8").trim().split("\n").length ===
+                  (mode === "windows-fallback" ? 1 : 2),
               { timeout: 3000 },
             )
             .toBe(true);
@@ -164,7 +165,7 @@ setTimeout(() => {}, 8000);
         if (signal) {
           expect(code).toBe(signal === "SIGINT" ? 130 : 143);
           expect(stdout).toBe("");
-          await descendantsExited();
+          await processesExited(2);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.max(0, 2600 - elapsed)),
           );
@@ -175,12 +176,14 @@ setTimeout(() => {}, 8000);
           expect(elapsed).toBeGreaterThanOrEqual(1000);
           expect(elapsed).toBeLessThan(2500);
         }
-        if (mode === "grandchild-pipes" || mode === "escaped-pipes") {
-          await descendantsExited();
+        if (["grandchild-pipes", "escaped-pipes", "ignore-term"].includes(mode)) {
+          await processesExited(2);
           await new Promise((resolve) =>
             setTimeout(resolve, Math.max(0, 2600 - elapsed)),
           );
           expect(existsSync(survived)).toBe(false);
+        } else if (mode === "windows-fallback") {
+          await processesExited(1);
         }
       } finally {
         child.kill("SIGKILL");
