@@ -165,6 +165,10 @@ setTimeout(() => {}, 8000);
           expect(code).toBe(signal === "SIGINT" ? 130 : 143);
           expect(stdout).toBe("");
           await descendantsExited();
+          await new Promise((resolve) =>
+            setTimeout(resolve, Math.max(0, 2600 - elapsed)),
+          );
+          expect(existsSync(survived)).toBe(false);
         } else {
           expect(code).toBe(0);
           expect(stdout.trim()).toBe("TIMEOUT");
