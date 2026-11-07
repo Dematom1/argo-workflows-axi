@@ -151,7 +151,9 @@ function spawn(
       if (process.platform !== "win32" && child.pid !== undefined) {
         try {
           process.kill(-child.pid, "SIGKILL");
-        } catch {}
+        } catch {
+          child.kill("SIGKILL");
+        }
       } else {
         child.kill("SIGKILL");
       }
