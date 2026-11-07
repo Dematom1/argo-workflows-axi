@@ -220,8 +220,12 @@ function spawn(
       cleanup();
       if (settled) return;
       settled = true;
-      const out = Buffer.concat(stdout).toString("utf8");
-      const err = Buffer.concat(stderr).toString("utf8");
+      const out = failure?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+        ? ""
+        : Buffer.concat(stdout).toString("utf8");
+      const err = failure?.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+        ? ""
+        : Buffer.concat(stderr).toString("utf8");
       if (failure?.code === "ENOENT") {
         reject(
           op.bin === "argo"
