@@ -76,9 +76,7 @@ setTimeout(() => {}, 8000);
       const moduleUrl = pathToFileURL(
         join(dir, "package/dist/src/seam.js"),
       ).href;
-      const signal = ["SIGINT", "SIGTERM"].includes(mode)
-        ? mode
-        : undefined;
+      const signal = ["SIGINT", "SIGTERM"].includes(mode) ? mode : undefined;
       const started = performance.now();
       const child = spawn(
         process.execPath,
@@ -166,9 +164,7 @@ setTimeout(() => {}, 8000);
         const elapsed = performance.now() - started;
         expect(existsSync(ready), stdout + stderr).toBe(true);
         if (signal) {
-          expect(code).toBe(
-            signal === "SIGINT" ? 130 : 143,
-          );
+          expect(code).toBe(signal === "SIGINT" ? 130 : 143);
           expect(stdout).toBe("");
           await processesExited(2);
           await new Promise((resolve) =>
