@@ -157,6 +157,8 @@ function spawn(
       } else {
         child.kill("SIGKILL");
       }
+      child.stdout.destroy();
+      child.stderr.destroy();
     };
     const interrupt = (exitCode: number) => {
       kill();
@@ -174,6 +176,7 @@ function spawn(
     const timer = setTimeout(() => {
       timedOut = true;
       kill();
+      finish(null);
     }, timeoutMs);
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
       bytes += chunk.length;
@@ -184,6 +187,7 @@ function spawn(
           { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
         );
         kill();
+        finish(null);
       } else {
         sink.push(chunk);
       }
