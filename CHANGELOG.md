@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.15](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.14...argo-workflows-axi-v0.1.15) (2026-11-04)
+
+
+### Bug Fixes
+
+* **setup:** repair Claude hook installation ([#48](https://github.com/Dematom1/argo-workflows-axi/issues/48)) ([e2459f1](https://github.com/Dematom1/argo-workflows-axi/commit/e2459f1a0b702e1b5768390857b7039d7d053fe7))
+
 ## [0.1.14](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.13...argo-workflows-axi-v0.1.14) (2026-11-02)
 
 
