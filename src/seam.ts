@@ -143,6 +143,7 @@ function spawn(
     const stderr: Buffer[] = [];
     let bytes = 0;
     let timedOut = false;
+    let outputLimitExceeded = false;
     let settled = false;
     let failure: NodeJS.ErrnoException | undefined;
 
@@ -150,15 +151,12 @@ function spawn(
       if (process.platform !== "win32" && child.pid !== undefined) {
         try {
           process.kill(-child.pid, "SIGKILL");
-        } catch {
-          child.kill("SIGKILL");
-        }
+        } catch {}
       } else {
         child.kill("SIGKILL");
       }
       child.stdout.destroy();
       child.stderr.destroy();
-      child.unref();
     };
     const interrupt = (exitCode: number) => {
       kill();
@@ -181,6 +179,7 @@ function spawn(
     const collect = (sink: Buffer[]) => (chunk: Buffer) => {
       bytes += chunk.length;
       if (bytes > MAX_BUFFER) {
+        outputLimitExceeded = true;
         failure = Object.assign(
           new Error(`stdout maxBuffer length exceeded (${MAX_BUFFER})`),
           { code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER" },
@@ -237,6 +236,7 @@ function spawn(
         const mapped = mapArgoFailure(failure.message);
         reject(
           op.tier === "write" &&
+            !outputLimitExceeded &&
             ["SERVER_UNREACHABLE", "UNKNOWN"].includes(errorCode(mapped) ?? "")
             ? axiError(
                 `${errorMessage(mapped)}; acceptance is unknown; inspect the target before retrying`,
