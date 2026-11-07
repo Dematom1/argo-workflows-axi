@@ -56,6 +56,7 @@ if (['ignore-term', 'windows-fallback'].includes(process.env.MODE)) {
   \`], { stdio: ['ignore', 'inherit', 'inherit'], detached: false });
 }
 writeFileSync(process.env.READY, 'ready');
+if (process.env.MODE === 'escaped-pipes') process.exit(0);
 setTimeout(() => {}, 8000);
 `,
         { mode: 0o755 },
