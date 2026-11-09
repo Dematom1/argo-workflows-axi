@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.16](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.15...argo-workflows-axi-v0.1.16) (2026-11-07)
+
+
+### Bug Fixes
+
+* **argo-workflows-axi:** terminate subprocess groups at deadlines ([#51](https://github.com/Dematom1/argo-workflows-axi/issues/51)) ([1b3d5e8](https://github.com/Dematom1/argo-workflows-axi/commit/1b3d5e86215e78b075a6b6f98a72d73b7a6d5f6b))
+
 ## [0.1.15](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.14...argo-workflows-axi-v0.1.15) (2026-11-04)
 
 
