@@ -7,7 +7,7 @@
   "env": {
     "builtin": true
   },
-  "ignorePatterns": ["dist/**", "node_modules/**", "**/node_modules/**"],
+  "ignorePatterns": ["dist/**", "coverage/**", "node_modules/**", "**/node_modules/**"],
   "rules": {
     "constructor-super": "error",
     "for-direction": "error",
