@@ -52,8 +52,8 @@ describe("setup hooks failures", () => {
       claudeSettingsMode: 0o000,
     });
     try {
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout).toContain("code: FILE_ERROR");
+      expect(result.exitCode, outcome(result)).toBe(1);
+      expect(result.stdout, outcome(result)).toContain("code: FILE_ERROR");
     } finally {
       chmodSync(join(result.home, ".claude", "settings.json"), 0o600);
     }
@@ -63,17 +63,17 @@ describe("setup hooks failures", () => {
     const installed = run(["setup", "hooks"], {
       claudeSettings: JSON.stringify({ keep: true }),
     });
-    expect(installed.exitCode).toBe(0);
+    expect(installed.exitCode, outcome(installed)).toBe(0);
     const codex = join(installed.home, ".codex", "hooks.json");
     chmodSync(codex, 0o400);
     const denied = run(["setup", "uninstall"], { home: installed.home });
-    expect(denied.exitCode).toBe(1);
-    expect(denied.stdout).toContain("code: SETUP_FAILED");
+    expect(denied.exitCode, outcome(denied)).toBe(1);
+    expect(denied.stdout, outcome(denied)).toContain("code: SETUP_FAILED");
     expect(readFileSync(codex, "utf8")).toContain("argo-workflows-axi");
     chmodSync(codex, 0o600);
     const removed = run(["setup", "uninstall"], { home: installed.home });
-    expect(removed.exitCode).toBe(0);
-    expect(removed.stdout).toContain("session_end: absent");
+    expect(removed.exitCode, outcome(removed)).toBe(0);
+    expect(removed.stdout, outcome(removed)).toContain("session_end: absent");
     const settings = JSON.parse(
       readFileSync(join(installed.home, ".claude", "settings.json"), "utf8"),
     );
@@ -88,13 +88,13 @@ describe("setup hooks failures", () => {
     ["read-only OpenCode config", { readonlyConfig: true }],
   ])("reports %s as a structured failure", (_name, options) => {
     const result = run(["setup", "hooks"], options);
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain("code: SETUP_FAILED");
-    expect(result.stdout).toContain("Hook setup failed");
-    expect(result.stdout).toContain(
+    expect(result.exitCode, outcome(result)).toBe(1);
+    expect(result.stdout, outcome(result)).toContain("code: SETUP_FAILED");
+    expect(result.stdout, outcome(result)).toContain("Hook setup failed");
+    expect(result.stdout, outcome(result)).toContain(
       _name === "read-only Codex hooks" ? "codex" : "opencode",
     );
-    expect(result.stdout).toContain("EACCES");
+    expect(result.stdout, outcome(result)).toContain("EACCES");
   });
 
   it("reports all failed writes with every affected agent and file", () => {
@@ -103,19 +103,21 @@ describe("setup hooks failures", () => {
       readonlyCodex: true,
       readonlyConfig: true,
     });
-    expect(result.exitCode).toBe(1);
-    expect(result.stdout).toContain("code: SETUP_FAILED");
+    expect(result.exitCode, outcome(result)).toBe(1);
+    expect(result.stdout, outcome(result)).toContain("code: SETUP_FAILED");
     for (const agent of ["claude", "codex", "opencode"]) {
-      expect(result.stdout).toContain(agent);
+      expect(result.stdout, outcome(result)).toContain(agent);
     }
-    expect(result.stdout).toContain(".codex/hooks.json");
-    expect(result.stdout).toContain(".config/opencode/plugins");
-    expect(result.stdout).toContain(".claude/settings.json");
+    expect(result.stdout, outcome(result)).toContain(".codex/hooks.json");
+    expect(result.stdout, outcome(result)).toContain(
+      ".config/opencode/plugins",
+    );
+    expect(result.stdout, outcome(result)).toContain(".claude/settings.json");
   });
 
   it("continues uninstalling other hooks when Codex cannot be read", () => {
     const installed = run(["setup", "hooks"]);
-    expect(installed.exitCode).toBe(0);
+    expect(installed.exitCode, outcome(installed)).toBe(0);
     const plugin = join(
       installed.home,
       ".config",
@@ -128,9 +130,9 @@ describe("setup hooks failures", () => {
     chmodSync(codex, 0o000);
     try {
       const result = run(["setup", "uninstall"], { home: installed.home });
-      expect(result.exitCode).toBe(1);
-      expect(result.stdout).toContain("code: SETUP_FAILED");
-      expect(result.stdout).toContain(codex);
+      expect(result.exitCode, outcome(result)).toBe(1);
+      expect(result.stdout, outcome(result)).toContain("code: SETUP_FAILED");
+      expect(result.stdout, outcome(result)).toContain(codex);
       expect(
         readFileSync(join(installed.home, ".claude", "settings.json"), "utf8"),
       ).not.toContain("argo-workflows-axi");
