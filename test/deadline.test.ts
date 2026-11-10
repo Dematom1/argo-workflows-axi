@@ -58,7 +58,7 @@ setTimeout(() => {}, 8000);
 `,
         { mode: 0o755 },
       );
-    });
+    }, 30_000);
     afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
     it.each([

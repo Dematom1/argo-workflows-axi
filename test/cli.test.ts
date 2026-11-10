@@ -2,7 +2,7 @@ import { decode } from "@toon-format/toon";
 import { describe, expect, it } from "vitest";
 import { buildCommands } from "../src/cli.js";
 import { REFUSALS } from "../src/registry.js";
-import { argoCalls, KUBE_DEFAULTS, run } from "./helpers.js";
+import { argoCalls, KUBE_DEFAULTS, outcome, run } from "./helpers.js";
 
 describe("cli basics", () => {
   it("prints the bare version for -v, -V and --version without calling argo", () => {
@@ -23,7 +23,7 @@ describe("cli basics", () => {
     expect(registeredCommands).toContain("context");
     for (const name of registeredCommands) {
       const result = run([name, "--help"]);
-      expect(result.exitCode, name).toBe(0);
+      expect(result.exitCode, `${name}\n${outcome(result)}`).toBe(0);
       expect(() => decode(result.stdout), name).not.toThrow();
       const subcommands = result.stdout.match(
         /subcommands\[\d+\]:\n((?: {2}.+\n)+)/,
@@ -38,7 +38,9 @@ describe("cli basics", () => {
           ) ?? [];
       for (const subcommand of names) {
         const help = run([name, subcommand, "--help"]);
-        expect(help.exitCode, `${name} ${subcommand}`).toBe(0);
+        expect(help.exitCode, `${name} ${subcommand}\n${outcome(help)}`).toBe(
+          0,
+        );
         expect(
           () => decode(help.stdout),
           `${name} ${subcommand}`,
@@ -52,13 +54,13 @@ describe("cli basics", () => {
       ["setup", "uninstall"],
     ]) {
       const help = run([...route, "--help"]);
-      expect(help.exitCode, route.join(" ")).toBe(0);
+      expect(help.exitCode, `${route.join(" ")}\n${outcome(help)}`).toBe(0);
       expect(() => decode(help.stdout), route.join(" ")).not.toThrow();
     }
 
     for (const refusal of Object.keys(REFUSALS)) {
       const help = run([...refusal.split(" "), "--help"]);
-      expect(help.exitCode, refusal).toBe(0);
+      expect(help.exitCode, `${refusal}\n${outcome(help)}`).toBe(0);
       expect(() => decode(help.stdout), refusal).not.toThrow();
     }
 

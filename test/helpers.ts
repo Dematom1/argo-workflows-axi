@@ -188,6 +188,11 @@ export function run(args: string[], options: RunOptions = {}): RunResult {
   };
 }
 
+/** Assertion message that shows what the CLI actually did, for CI-only flakes. */
+export function outcome(result: RunResult): string {
+  return `exit ${result.exitCode}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`;
+}
+
 export function argoCalls(result: RunResult): string[][] {
   return result.calls.filter((c) => c.bin === "argo").map((c) => c.argv);
 }

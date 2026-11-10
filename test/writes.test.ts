@@ -8,6 +8,7 @@ import {
   KUBE_DEFAULTS,
   argoCalls,
   json,
+  outcome,
   run,
   writeCalls,
   type FakeResponse,
@@ -911,7 +912,9 @@ describe("idempotent no-ops (S15)", () => {
       ],
       config: ALLOW,
     });
-    expect(suspended.stdout).toContain("no-op (already_suspended)");
+    expect(suspended.stdout, outcome(suspended)).toContain(
+      "no-op (already_suspended)",
+    );
     const stopping = run(["wf", "stop", "ingest-q9w8e"], {
       responses: [
         ...KUBE_DEFAULTS,
@@ -919,7 +922,9 @@ describe("idempotent no-ops (S15)", () => {
       ],
       config: ALLOW,
     });
-    expect(stopping.stdout).toContain("no-op (already_shutting_down (Stop))");
+    expect(stopping.stdout, outcome(stopping)).toContain(
+      "no-op (already_shutting_down (Stop))",
+    );
   });
 
   it("retry of a failed workflow forwards argo's own flags", () => {
@@ -940,7 +945,7 @@ describe("idempotent no-ops (S15)", () => {
         config: ALLOW,
       },
     );
-    expect(result.exitCode).toBe(0);
+    expect(result.exitCode, outcome(result)).toBe(0);
     expect(writeCalls(result)).toEqual([
       [
         "retry",
