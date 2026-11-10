@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BIN, run } from "./helpers.js";
+import { BIN, outcome, run } from "./helpers.js";
 
 describe("setup hooks failures", () => {
   it("repairs SessionStart without dereferencing malformed groups or commands", () => {
@@ -80,9 +80,8 @@ describe("setup hooks failures", () => {
     expect(settings.keep).toBe(true);
     expect(JSON.stringify(settings)).not.toContain("# argo-workflows-axi");
     expect(readFileSync(codex, "utf8")).not.toContain("argo-workflows-axi");
-    expect(run(["setup", "uninstall"], { home: installed.home }).exitCode).toBe(
-      0,
-    );
+    const again = run(["setup", "uninstall"], { home: installed.home });
+    expect(again.exitCode, outcome(again)).toBe(0);
   });
   it.each([
     ["read-only Codex hooks", { readonlyCodex: true }],
