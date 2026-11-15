@@ -32,6 +32,16 @@ help[5]:
   Run `argo-workflows-axi setup hooks` to install the session hooks
 ```
 
+## Quick start
+
+Install the skill so your agent knows when to reach for the tool:
+
+```sh
+npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g
+```
+
+Or with zero setup, tell your agent: Execute `npx -y argo-workflows-axi` to see what is failing or running in Argo Workflows.
+
 ## Requirements
 
 Tested on Linux and macOS. Windows is not tested or supported yet; config paths, credential storage, and hooks are present but unvalidated on Windows. Printed command examples use POSIX shell quoting and are not copy-pasteable in the default Windows shell.
@@ -42,27 +52,16 @@ Tested on Linux and macOS. Windows is not tested or supported yet; config paths,
 
 argo-workflows-axi adds no auth of its own. It uses whatever the `argo` CLI uses: your kubeconfig in Kubernetes-API mode, or `ARGO_SERVER` / `ARGO_TOKEN` in Argo Server mode.
 
-## Install
+## Optional
 
-Install globally:
+Install globally for a shorter command and faster startup:
 
 ```sh
 npm install -g argo-workflows-axi
 argo-workflows-axi
 ```
 
-Or run without installing:
-
-```sh
-npx -y argo-workflows-axi
-```
-
-### Give your agent the context: hook or skill
-
-You only need one of these.
-
-- **Session hook (recommended).** It installs user-scope SessionStart hooks for Claude Code, Codex and OpenCode, plus a Claude Code SessionEnd hook. At session start it runs `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. At session end, Claude Code records command names and counts, plus the most-used target and namespace, per working directory; it does not store command arguments or flag values. `ctx` includes the latest record as `last_session`. Run `argo-workflows-axi setup uninstall` to remove the hooks. Session start never touches the network, a keychain or SSO.
-- **Skill.** `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi` installs a small skill that tells the agent when to reach for the tool. It defers all guidance to the CLI's own `--help`.
+Instead of the skill, you can install session hooks with `argo-workflows-axi setup hooks`. They install user-scope SessionStart hooks for Claude Code, Codex and OpenCode, plus a Claude Code SessionEnd hook. At session start they run `argo-workflows-axi-ctx`, the offline `ctx` view: target, namespace, argo version and whether writes are allowed. At session end, Claude Code records command names and counts, plus the most-used target and namespace, per working directory; it does not store command arguments or flag values. `ctx` includes the latest record as `last_session`. Run `argo-workflows-axi setup uninstall` to remove the hooks. Session start never touches the network, a keychain or SSO.
 
 ## Commands
 
@@ -195,6 +194,16 @@ gh workflow run release-please.yml --ref main -f tag=argo-workflows-axi-v0.1.1
 ```
 
 See [ROADMAP.md](ROADMAP.md) for what comes next, including the plan for adding writes.
+
+## Dematom1 platform AXIs
+
+| Tool               | Skill install                                                              |
+| ------------------ | -------------------------------------------------------------------------- |
+| terraform-axi      | `npx skills add Dematom1/terraform-axi --skill terraform-axi -g`           |
+| k8s-axi            | `npx skills add Dematom1/k8s-axi --skill k8s-axi -g`                       |
+| argocd-axi         | `npx skills add Dematom1/argocd-axi --skill argocd-axi -g`                 |
+| argo-workflows-axi | `npx skills add Dematom1/argo-workflows-axi --skill argo-workflows-axi -g` |
+| datadog-axi        | Optional: `npx skills add Dematom1/datadog-axi --skill datadog-axi -g`     |
 
 ## License
 

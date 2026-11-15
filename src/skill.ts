@@ -2,9 +2,9 @@ import { DESCRIPTION } from "./cli.js";
 
 // Trigger string agents match against to auto-load the skill.
 export const SKILL_DESCRIPTION =
-  "Inspect and operate Argo Workflows through the argo-workflows-axi CLI - workflows, logs, cron workflows, templates and the archive. " +
-  "Use whenever a task touches Argo Workflows: finding why a workflow failed, reading step logs, checking cron schedules, " +
-  "or retrying, stopping, suspending, resuming or submitting workflows (writes preview first).";
+  "Find out why an Argo Workflow failed and fix it safely: failed steps with exit-code and OOM hints, bounded step logs, " +
+  "cron schedules and templates, plus previewed, allowlisted retry, stop, suspend, resume and submit. " +
+  "Use whenever a task touches Argo Workflows.";
 
 // Hard cap so a regeneration cannot re-inflate the stub with CLI-owned guidance.
 export const MAX_SKILL_MARKDOWN_CHARS = 2500;

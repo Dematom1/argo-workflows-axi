@@ -1,6 +1,6 @@
 ---
 name: argo-workflows-axi
-description: "Inspect and operate Argo Workflows through the argo-workflows-axi CLI - workflows, logs, cron workflows, templates and the archive. Use whenever a task touches Argo Workflows: finding why a workflow failed, reading step logs, checking cron schedules, or retrying, stopping, suspending, resuming or submitting workflows (writes preview first)."
+description: "Find out why an Argo Workflow failed and fix it safely: failed steps with exit-code and OOM hints, bounded step logs, cron schedules and templates, plus previewed, allowlisted retry, stop, suspend, resume and submit. Use whenever a task touches Argo Workflows."
 user-invocable: false
 ---
 
