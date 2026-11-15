@@ -14,7 +14,11 @@
     "cli",
     "agent",
     "axi",
-    "toon"
+    "toon",
+    "argo-workflows-axi",
+    "claude-code",
+    "codex",
+    "skills"
   ],
   "bin": {
     "argo-workflows-axi": "dist/bin/argo-workflows-axi.js",
