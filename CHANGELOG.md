@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.17](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.16...argo-workflows-axi-v0.1.17) (2026-11-15)
+
+
+### Features
+
+* improve Argo Workflows onboarding ([#55](https://github.com/Dematom1/argo-workflows-axi/issues/55)) ([f600fbe](https://github.com/Dematom1/argo-workflows-axi/commit/f600fbed586dd9ff1c1d586f5e915be0082aecdd))
+
 ## [0.1.16](https://github.com/Dematom1/argo-workflows-axi/compare/argo-workflows-axi-v0.1.15...argo-workflows-axi-v0.1.16) (2026-11-07)
 
 
