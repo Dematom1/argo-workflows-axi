@@ -19,7 +19,8 @@ describe.skipIf(process.platform === "win32")(
   () => {
     const dir = mkdtempSync(join(tmpdir(), "argo-workflows-axi-deadline-"));
     beforeAll(() => {
-      execFileSync("npm", ["run", "build"], { cwd: ROOT, stdio: "inherit" });
+      // Packs the dist built by global-setup; rebuilding here would rewrite
+      // dist while other test files are importing it.
       const tarball = JSON.parse(
         execFileSync(
           "npm",
